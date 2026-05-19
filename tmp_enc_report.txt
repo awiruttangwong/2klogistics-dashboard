@@ -1,0 +1,20 @@
+const PAGES = [
+  { id: 'master', title: 'เธ เธฒเธ�เธฃเธงเธกเธ�เธฅเธ�เธฃเธฐเธ�เธญเธ�เธ�เธฒเธฃ' },
+  { id: 'daily', title: 'เธงเธดเน€เธ�เธฃเธฒเธฐเธซเน�เน�เธฅเธฐเน€เธ�เธฃเธตเธขเธ�เน€เธ—เธตเธขเธ�เธ�เธฅเธ�เธฒเธฃเธ”เธณเน€เธ�เธดเธ�เธ�เธฒเธ�' },
+  { id: 'oilprice', title: 'เธ•เธฃเธงเธ�เธชเธญเธ�เธฃเธฒเธ�เธฒเธ�เน�เธณเธกเธฑเธ�เธ”เธตเน€เธ�เธฅ' }
+];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const MTH = { January: 'เธก.เธ�.', February: 'เธ�.เธ�.', March: 'เธกเธต.เธ�.', April: 'เน€เธก.เธข.', May: 'เธ�.เธ�.', June: 'เธกเธด.เธข.', July: 'เธ�.เธ�.', August: 'เธช.เธ�.', September: 'เธ�.เธข.', October: 'เธ•.เธ�.', November: 'เธ�.เธข.', December: 'เธ�.เธ�.' };
+const COLORS = ['#3b82f6', '#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#8b5cf6', '#14b8a6', '#f97316'];
+let DATA = null, currentPage = 0;
+
+// Helpers for multi-month readiness
+function getActiveMonths(data, key) {
+  // Return months that have any non-zero data across all records
+  const records = data[key] || data.routeTrend || [];
+  return MONTHS.filter(m => records.some(r => ((r.months && r.months[m]) || (r[m])) && ((r.months?.[m]?.trips || 0) > 0 || (r.months?.[m]?.margin || 0) !== 0 || (r.months?.[m]?.loss || 0) > 0)));
+}
+function getActiveMonthsFromLoss(lt) {
+  if (!lt || !lt.byMonth) return [];
+  return MONTHS.filter(m => lt.byMonth[m] && ((lt.byMonth[m].count || 0) > 0 || (lt.byMonth[m].loss || 0) !== 0));
+}

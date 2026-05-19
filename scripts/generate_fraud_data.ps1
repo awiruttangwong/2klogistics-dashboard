@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
-$csvPath = "C:\Users\ADMIN\Desktop\Data sum Daily EXPRESS 4 months\merged_all_months.csv"
-$outputPath = "C:\Users\ADMIN\Desktop\Data sum Daily EXPRESS 4 months\dashboard\fraud_data.js"
+$csvPath = "C:\Users\ADMIN\Desktop\Data sum Daily express 4 month V2.2\data\merged\merged_all_months.csv"
+$outputPath = "C:\Users\ADMIN\Desktop\Data sum Daily express 4 month V2.2\dashboard\fraud_data.js"
 
 Write-Host "Reading CSV file..."
 $rawData = Get-Content $csvPath | Select-Object -Skip 2 | ConvertFrom-Csv

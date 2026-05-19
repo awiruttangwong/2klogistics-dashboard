@@ -1400,8 +1400,23 @@ function buildFullTrend(d) {
 
   // Monthly aggregates from routeTrend (only for active months)
   const monthTrips = monthsToShow.map(m => d.routeTrend.reduce((a, r) => a + (r.months[m]?.trips || 0), 0));
+  const monthRevenue = monthsToShow.map(m => {
+    const dailyStat = getMonthlyStatsFromDaily(d, m);
+    if (dailyStat) return dailyStat.recv;
+    return d.routeTrend.reduce((sum, row) => {
+      const monthData = row.months?.[m] || {};
+      const recvValue = Number(monthData.recv);
+      if (Number.isFinite(recvValue)) return sum + recvValue;
+      return sum + (Number(monthData.pay) || 0) + (Number(monthData.oil) || 0) + (Number(monthData.margin) || 0);
+    }, 0);
+  });
   const monthMargins = monthsToShow.map(m => d.routeTrend.reduce((a, r) => a + (r.months[m]?.margin || 0), 0));
   const monthLabels = monthsToShow.map(m => MTH[m] || m);
+  const tripsDelta = monthTrips.length > 1 ? calcMoMDeltaPct(monthTrips[monthTrips.length - 1], monthTrips[monthTrips.length - 2]) : null;
+  const revenueDelta = monthRevenue.length > 1 ? calcMoMDeltaPct(monthRevenue[monthRevenue.length - 1], monthRevenue[monthRevenue.length - 2]) : null;
+  const marginDelta = monthMargins.length > 1 ? calcMoMDeltaPct(monthMargins[monthMargins.length - 1], monthMargins[monthMargins.length - 2], true) : null;
+  const monthPct = monthRevenue.map((recv, i) => recv > 0 ? (monthMargins[i] / recv) * 100 : null);
+  const avgPctDelta = monthPct.length > 1 ? calcMoMDeltaPct(monthPct[monthPct.length - 1], monthPct[monthPct.length - 2], true) : null;
 
   const top10 = d.routeTrend.slice().sort((a, b) => {
     const ta = monthsToShow.reduce((s, m) => s + (a.months[m]?.trips || 0), 0);
@@ -1412,10 +1427,10 @@ function buildFullTrend(d) {
   return `
     <!-- KPI Banner -->
     <div class="modal-full-grid">
-      ${modalKPICard('จำนวนเที่ยวทั้งหมด', fmt(s.totalTrips) + ' เที่ยว', monthRangeLabel(monthsToShow), '#3b82f6', 12.5)}
-      ${modalKPICard('ราคารับรวม', fmt(s.totalRevenue) + ' THB', monthCountLabel(monthCount), '#22c55e', 8.3)}
-      ${modalKPICard('ส่วนต่างรวม', fmt(s.totalMargin) + ' THB', s.totalMargin >= 0 ? 'ทำกำไร' : 'ขาดทุน', s.totalMargin >= 0 ? '#22c55e' : '#ef4444', -2.1)}
-      ${modalKPICard('กำไร % เฉลี่ย', fmtP(s.avgMarginPct), 'เฉลี่ยทุกเที่ยว', '#8b5cf6', 5.7)}
+      ${modalKPICard('จำนวนเที่ยวทั้งหมด', fmt(s.totalTrips) + ' เที่ยว', monthRangeLabel(monthsToShow), '#3b82f6', tripsDelta)}
+      ${modalKPICard('ราคารับรวม', fmt(s.totalRevenue) + ' THB', monthCountLabel(monthCount), '#22c55e', revenueDelta)}
+      ${modalKPICard('ส่วนต่างรวม', fmt(s.totalMargin) + ' THB', s.totalMargin >= 0 ? 'ทำกำไร' : 'ขาดทุน', s.totalMargin >= 0 ? '#22c55e' : '#ef4444', marginDelta)}
+      ${modalKPICard('กำไร % เฉลี่ย', fmtP(s.avgMarginPct), 'เฉลี่ยทุกเที่ยว', '#8b5cf6', avgPctDelta)}
     </div>
 
     <!-- Charts -->
@@ -1459,9 +1474,11 @@ function buildFullTrend(d) {
 
 function buildFullRanking(d) {
   const rk = d.routeRanking;
+  const routeKey = r => `${r?.customer || '-'}|${r?.route || '-'}|${r?.vtype || '-'}`;
   const allRoutes = [...rk.top, ...rk.bottom].sort((a, b) => b.margin - a.margin);
   const top10 = rk.top.slice(0, 10);
   const bot10 = rk.bottom.slice(0, 10);
+  const uniqueRouteCount = new Set(allRoutes.map(routeKey)).size;
 
   // Profitability stats from available data
   const allMargins = [...rk.top.map(r => r.margin), ...rk.bottom.map(r => r.margin)].filter(m => m != null);
@@ -1481,7 +1498,7 @@ function buildFullRanking(d) {
   return `
     <!-- KPIs -->
     <div class="modal-full-grid modal-full-grid-3">
-      ${modalKPICard('เส้นทางทั้งหมด', fmt(totalRoutes), 'เส้นทางที่มีข้อมูล', '#3b82f6')}
+      ${modalKPICard('เส้นทางทั้งหมด', fmt(uniqueRouteCount), 'เส้นทางที่มีข้อมูล', '#3b82f6')}
       ${modalKPICard('กำไรสูงสุด', fmt(rk.top[0]?.margin) + ' THB', rk.top[0]?.route || '-', '#22c55e')}
       ${modalKPICard('ขาดทุนสูงสุด', fmt(rk.bottom[0]?.margin) + ' THB', rk.bottom[0]?.route || '-', '#ef4444')}
     </div>
@@ -2046,7 +2063,7 @@ function getMasterModalTableConfigs(key, d) {
         const monthData = row.months?.[month] || {};
         const recvValue = Number(monthData.recv);
         if (Number.isFinite(recvValue)) return sum + recvValue;
-        return sum + (Number(monthData.pay) || 0) + (Number(monthData.margin) || 0);
+        return sum + (Number(monthData.pay) || 0) + (Number(monthData.oil) || 0) + (Number(monthData.margin) || 0);
       }, 0);
       return {
         order: index,
@@ -5166,6 +5183,7 @@ async function loadOilPriceCsv(force) {
       OIL_PRICE_DATA.prices = prices;
       OIL_PRICE_DATA.lastFetch = new Date().toISOString();
       OIL_PRICE_DATA.source = 'PTTOR';
+      OIL_PRICE_DATA.sourceUrl = 'https://www.pttor.com/news/oil-price';
       OIL_PRICE_DATA.productLabel = 'ดีเซล (ราคาขายปลีก กทม. และปริมณฑล)';
     }
     oilPriceCsvLoaded = true;
@@ -5303,7 +5321,7 @@ function buildOilPricePage(d) {
   <div class="op-source-bar">
     <div class="op-source-info">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-      <span>แหล่งข้อมูล: <a href="https://www.pttor.com/news/oil-price" target="_blank">${op?.source || 'PTTOR'}</a></span>
+      <span>แหล่งข้อมูล: <a href="${esc(op?.sourceUrl || 'https://www.pttor.com/news/oil-price')}" target="_blank" rel="noopener noreferrer">${op?.source || 'PTTOR'}</a></span>
     </div>
     <div class="op-source-info">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>

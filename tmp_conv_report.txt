@@ -1,0 +1,15 @@
+  const cp = d.customerProfit;
+  const s = d.summary;
+  const maxR = Math.max(...cp.map(c => c.recv));
+  const maxM = Math.max(...cp.filter(c => c.margin > 0).map(c => c.margin), 1);
+
+  let h = `<div class="master-grid-2" style="margin-bottom:20px;">
+    <div class="master-chart-card">
+      <h4>������¡����١���</h4>
+      ${barChart(cp, c => c.name, c => c.recv / maxR * 100, c => fmt(c.recv) + ' THB', null, c => fmt(c.trips) + ' �����', true, true)}
+    </div>
+    <div class="master-chart-card">
+      <h4>��ǹ��ҧ�����ط���¡����١���</h4>
+      ${barChart(cp, c => c.name, c => c.margin <= 0 ? 1 : c.margin / maxM * 100, c => fmt(c.margin) + ' THB', c => c.margin >= 0 ? COLORS[2] : '#ef4444', null, true)}
+    </div>
+  </div>`;

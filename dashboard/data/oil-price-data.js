@@ -7,6 +7,7 @@
    ──────────────────────────────────────────────────────────────── */
 const OIL_PRICE_DATA = {
   source: 'PTTOR',
+  sourceUrl: 'https://www.pttor.com/news/oil-price',
   product: 'ดีเซล ',
   productLabel: 'ดีเซล(ราคาขายปลีกหน้าปั๊ม PTT)',
   unit: 'บาท/ลิตร',
@@ -35,4 +36,3 @@ const OIL_PRICE_DATA = {
     { period_no: '20260508', period_name: '2026-05-08', year_en: 2026, update_date: '2026-05-08T00:00:00.000Z', price: 39.95 }
   ]
 };
-

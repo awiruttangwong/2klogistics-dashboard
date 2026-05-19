@@ -73,7 +73,8 @@ function showHelpV2() {
   lines.push('- Raw monthly data: DATA(M1)-DATA(M12)');
   lines.push('- MASTER is the merged table across configured months');
   lines.push('- SUMMARY_CACHE and TRIPS_CACHE are API read models for frontend');
-  lines.push('- OIL_DIESEL_DATA is maintained manually in your current process');
+  lines.push('- OIL_DIESEL_DATA is auto-refreshed for PTTOR Diesel price (with safe fallback)');
+  lines.push('- SYNC_AUDIT_LOG and SYNC_AUDIT_DETAIL store before/after diff every Refresh Full Dashboard run');
   lines.push('- Frontend must set scripts/api-config.js to your GAS Web App URL');
   ui.alert(lines.join('\n'));
 }
@@ -83,12 +84,12 @@ function fetchSourceData(sourceUrl, sourceSheetName) {
   try {
     sourceSS = SpreadsheetApp.openByUrl(sourceUrl);
   } catch (e) {
-    throw new Error('เนเธกเนเธชเธฒเธกเธฒเธฃเธ–เน€เธเธดเธ”เนเธเธฅเนเธ•เนเธเธ—เธฒเธเนเธ”เน เธเธฃเธธเธ“เธฒเธ•เธฃเธงเธเธชเธญเธเธงเนเธฒเธฅเธดเนเธเธเนเธ–เธนเธเธ•เนเธญเธ เนเธฅเธฐเธเธธเธ“เธกเธตเธชเธดเธ—เธเธดเนเน€เธเนเธฒเธ–เธถเธเนเธเธฅเนเธเธฑเนเธ');
+    throw new Error('ไม่สามารถเปิดไฟล์ต้นทางได้ กรุณาตรวจสอบว่าลิงก์ถูกต้อง และคุณมีสิทธิ์เข้าถึงไฟล์นั้น');
   }
 
   var sourceSheet = sourceSS.getSheetByName(sourceSheetName);
   if (!sourceSheet) {
-    throw new Error('เนเธกเนเธเธเธซเธเนเธฒเธเธตเธ—เธ—เธตเนเธเธทเนเธญ: ' + sourceSheetName + ' เนเธเนเธเธฅเนเธ•เนเธเธ—เธฒเธ');
+    throw new Error('ไม่พบหน้าชีทที่ชื่อ: ' + sourceSheetName + ' ในไฟล์ต้นทาง');
   }
 
   var lastRow = sourceSheet.getLastRow();
@@ -112,7 +113,7 @@ function fetchSourceData(sourceUrl, sourceSheetName) {
   for (var r = 1; r < values.length; r++) {
     var row = values[r];
 
-    // STEP 2: A,B,E,H,I,J,K เธ•เนเธญเธเธกเธตเธเนเธญเธกเธนเธฅเธ—เธธเธเธญเธฑเธ
+    // STEP 2: คอลัมน์ที่กำหนดใน NOT_NULL_COLS ต้องมีข้อมูลครบ
     var passAnd = true;
     for (var n = 0; n < NOT_NULL_COLS.length; n++) {
       var checkIdx = NOT_NULL_COLS[n];
@@ -181,7 +182,7 @@ function processSheetData(sheet) {
   for (var r = 0; r < Math.min(values.length, 5); r++) {
     for (var c = 0; c < values[r].length; c++) {
       if (String(values[r][c]).indexOf('#REF!') !== -1) {
-        throw new Error('เธเธ #REF! เนเธเธเนเธญเธกเธนเธฅ เธเธฃเธธเธ“เธฒเธ•เธฃเธงเธเธชเธญเธเธชเธนเธ•เธฃ QUERY/IMPORTRANGE');
+        throw new Error('พบ #REF! ในข้อมูล กรุณาตรวจสอบสูตร QUERY/IMPORTRANGE');
       }
     }
   }
@@ -193,7 +194,7 @@ function processSheetData(sheet) {
   for (var i = 0; i < values.length; i++) {
     var rowValues = values[i];
 
-    // Check R,S,T columns (index 9,10,11) โ€” skip if all empty or only R with empty S,T
+    // Check R,S,T columns (index 9,10,11) - skip if all empty or only R with empty S,T
     if (hasCheckColumns) {
       var valR = rowValues[9];
       var valS = rowValues[10];
@@ -267,18 +268,18 @@ function importAllConfiguredSheets() {
 
     var sheet = getOrCreateSheet(ss, sheetName);
     if (!sheet) {
-      fullReport.errors.push('[' + sheetName + '] เนเธกเนเธเธเธเธตเธ—เนเธเน€เธงเธดเธฃเนเธเธเธธเนเธ');
+      fullReport.errors.push('[' + sheetName + '] ไม่พบชีทในเวิร์กบุ๊ก');
       skippedCount++;
       continue;
     }
 
     try {
-      ss.toast('เธเธณเธฅเธฑเธเธ”เธถเธเธเนเธญเธกเธนเธฅเธชเธณเธซเธฃเธฑเธ ' + sheetName + '...', 'Sync เธซเธฅเธฒเธขเธเธตเธ— (' + (i + 1) + '/12)', 5);
+      ss.toast('กำลังดึงข้อมูลสำหรับ ' + sheetName + '...', 'Sync หลายชีท (' + (i + 1) + '/12)', 5);
       var sourceSheetName = SOURCE_SHEET_NAMES[sheetName] || 'SUMDATA';
       var data = fetchSourceData(sourceUrl, sourceSheetName);
 
       if (data.length === 0) {
-        fullReport.errors.push('[' + sheetName + '] เนเธกเนเธเธเธเนเธญเธกเธนเธฅเนเธเนเธเธฅเนเธ•เนเธเธ—เธฒเธ');
+        fullReport.errors.push('[' + sheetName + '] ไม่พบข้อมูลในไฟล์ต้นทาง');
         skippedCount++;
         continue;
       }
@@ -303,40 +304,40 @@ function importAllConfiguredSheets() {
     }
   }
 
-  ss.toast('เธเธฃเธฐเธกเธงเธฅเธเธฅเน€เธชเธฃเนเธเธชเธดเนเธ (' + processedCount + ' เธเธตเธ—)', 'เน€เธชเธฃเนเธเธชเธกเธเธนเธฃเธ“เน', 5);
+  ss.toast('ประมวลผลเสร็จสิ้น (' + processedCount + ' ชีท)', 'เสร็จสมบูรณ์', 5);
 
   var lines = [];
-  lines.push('=== เธฃเธฒเธขเธเธฒเธ Sync เธ—เธธเธเธเธตเธ—เธ—เธตเนเธกเธตเธฅเธดเนเธเธเน ===');
-  lines.push('เธเธตเธ—เธ—เธตเนเธเธฃเธฐเธกเธงเธฅเธเธฅ: ' + processedCount + ' เธเธตเธ—');
-  lines.push('เธเธตเธ—เธ—เธตเนเธเนเธฒเธก (เนเธกเนเธกเธตเธฅเธดเนเธเธเน): ' + skippedCount + ' เธเธตเธ—');
+  lines.push('=== รายงาน Sync ทุกชีทที่มีลิงก์ ===');
+  lines.push('ชีทที่ประมวลผล: ' + processedCount + ' ชีท');
+  lines.push('ชีทที่ข้าม (ไม่มีลิงก์): ' + skippedCount + ' ชีท');
   lines.push('');
-  lines.push('เนเธ–เธงเธ—เธตเนเธญเนเธฒเธ: ' + fullReport.totalRead + ' เนเธ–เธง');
-  lines.push('เธฅเธเนเธ–เธงเธ—เธตเนเธเนเธฒเน€เธเนเธ 0/เธงเนเธฒเธ: ' + fullReport.totalDeleted + ' เนเธ–เธง');
-  lines.push('เนเธเธฅเธเธเธทเนเธญเธเธเธชเนเธ: ' + fullReport.totalMapped + ' เนเธ–เธง');
+  lines.push('แถวที่อ่าน: ' + fullReport.totalRead + ' แถว');
+  lines.push('ลบแถวที่ค่าเป็น 0/ว่าง: ' + fullReport.totalDeleted + ' แถว');
+  lines.push('แปลงชื่อขนส่ง: ' + fullReport.totalMapped + ' แถว');
 
   var names = Object.keys(fullReport.customers).sort();
   if (names.length > 0) {
     lines.push('');
-    lines.push('=== เธฃเธฒเธขเธเธทเนเธญเธเธเธชเนเธเธ—เธตเนเธเธ (' + names.length + ' เธฃเธฒเธข) ===');
+    lines.push('=== รายชื่อขนส่งที่พบ (' + names.length + ' ราย) ===');
     for (var i = 0; i < names.length; i++) {
-      lines.push('- ' + names[i] + ': ' + fullReport.customers[names[i]] + ' เนเธ–เธง');
+      lines.push('- ' + names[i] + ': ' + fullReport.customers[names[i]] + ' แถว');
     }
   }
 
   if (fullReport.errors.length > 0) {
     lines.push('');
-    lines.push('=== เธเนเธญเธเธดเธ”เธเธฅเธฒเธ” (' + fullReport.errors.length + ' เธฃเธฒเธขเธเธฒเธฃ) ===');
+    lines.push('=== ข้อผิดพลาด (' + fullReport.errors.length + ' รายการ) ===');
     var limit = Math.min(fullReport.errors.length, 10);
     for (var j = 0; j < limit; j++) {
       lines.push('- ' + fullReport.errors[j]);
     }
     if (fullReport.errors.length > 10) {
-      lines.push('... เนเธฅเธฐเธญเธตเธ ' + (fullReport.errors.length - 10) + ' เธฃเธฒเธขเธเธฒเธฃ');
+      lines.push('... และอีก ' + (fullReport.errors.length - 10) + ' รายการ');
     }
   }
 
   lines.push('');
-  lines.push('=== เธเธฃเธฐเธกเธงเธฅเธเธฅเน€เธชเธฃเนเธเธชเธดเนเธ ===');
+  lines.push('=== ประมวลผลเสร็จสิ้น ===');
   ui.alert(lines.join('\n'));
 }
 
@@ -355,7 +356,7 @@ function removeAllTriggers() {
   for (var i = 0; i < triggers.length; i++) {
     ScriptApp.deleteTrigger(triggers[i]);
   }
-  ui.alert('เธฅเธ Trigger เธ—เธฑเนเธเธซเธกเธ”เนเธฅเนเธง (' + triggers.length + ' เธฃเธฒเธขเธเธฒเธฃ)');
+  ui.alert('ลบ Trigger ทั้งหมดแล้ว (' + triggers.length + ' รายการ)');
 }
 
 // ============================================
@@ -398,29 +399,51 @@ function createDailyTriggerCore_() {
   );
 }
 
+function getOilServiceMeta_() {
+  return {
+    url: 'https://orapiweb.pttor.com/oilservice/OilPrice.asmx',
+    namespace: 'http://www.pttor.com',
+    actionBase: 'https://orapiweb.pttor.com/',
+    sourceName: 'PTTOR',
+    sourceUrl: 'https://www.pttor.com/news/oil-price'
+  };
+}
+
 function refreshOilDataForApi_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = getOrCreateSheet(ss, SHEET_OIL_DIESEL);
   var header = [['date', 'diesel_b7', 'source', 'note']];
-  var rows = [];
+  var existing = readOilRowsMap_(sheet);
+  var fetchResult = null;
+  var fetchError = '';
 
-  if (sheet.getLastRow() > 1) {
-    var values = sheet.getDataRange().getDisplayValues();
-    for (var i = 1; i < values.length; i++) {
-      var row = values[i];
-      var date = parseDate(row[0]);
-      var price = parseMoney(row[1]);
-      if (!date || price === null) continue;
-      rows.push([
-        date,
-        price,
-        String(row[2] || 'PTTOR').trim() || 'PTTOR',
-        String(row[3] || '').trim()
-      ]);
+  try {
+    fetchResult = fetchOrDieselRows_();
+  } catch (e) {
+    fetchError = e && e.message ? e.message : String(e);
+    Logger.log('[refreshOilDataForApi_] OR fetch error: ' + fetchError);
+  }
+
+  if (fetchResult && fetchResult.rows && fetchResult.rows.length) {
+    for (var i = 0; i < fetchResult.rows.length; i++) {
+      var row = fetchResult.rows[i];
+      if (!row || !row.date || row.price === null || row.price === undefined) continue;
+      existing[row.date] = [
+        row.date,
+        row.price,
+        row.source || 'PTTOR',
+        row.note || ''
+      ];
     }
   }
 
+  var rows = [];
+  for (var k in existing) {
+    if (!existing.hasOwnProperty(k)) continue;
+    rows.push(existing[k]);
+  }
   rows.sort(function(a, b) { return String(a[0]).localeCompare(String(b[0])); });
+
   var clearRows = Math.max(sheet.getLastRow(), rows.length + 1, 1);
   sheet.getRange(1, 1, clearRows, 4).clearContent();
   sheet.getRange(1, 1, 1, 4).setValues(header);
@@ -434,8 +457,691 @@ function refreshOilDataForApi_() {
     source: (payload && payload.source) || '-',
     latestDate: (payload && payload.prices && payload.prices.length)
       ? payload.prices[payload.prices.length - 1].period_name
-      : null
+      : null,
+    updatedRows: (fetchResult && fetchResult.rows && fetchResult.rows.length) || 0,
+    fetchError: fetchError || ''
   };
+}
+
+function readOilRowsMap_(sheet) {
+  var out = {};
+  if (!sheet || sheet.getLastRow() <= 1) return out;
+  var values = sheet.getDataRange().getDisplayValues();
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    var date = parseDate(row[0]);
+    var price = parseMoney(row[1]);
+    if (!date || price === null) continue;
+    out[date] = [
+      date,
+      price,
+      String(row[2] || 'PTTOR').trim() || 'PTTOR',
+      String(row[3] || '').trim()
+    ];
+  }
+  return out;
+}
+
+function fetchOrDieselRows_() {
+  var meta = getOilServiceMeta_();
+  var attempts = buildOilSoapAttempts_();
+  var errors = [];
+  for (var i = 0; i < attempts.length; i++) {
+    var a = attempts[i];
+    try {
+      var xmlText = callOilSoap_(a.action, a.paramsXml);
+      var records = parseOilSoapRecords_(xmlText, a.resultTag);
+      var rows = selectDieselRows_(records, meta.sourceName);
+      if (rows.length > 0) {
+        return {
+          rows: rows,
+          source: meta.sourceName,
+          sourceUrl: meta.sourceUrl
+        };
+      }
+      errors.push(a.action + ': no diesel row');
+    } catch (e) {
+      errors.push(a.action + ': ' + (e && e.message ? e.message : String(e)));
+    }
+  }
+  throw new Error('OR oil service unavailable (' + errors.join(' | ') + ')');
+}
+
+function buildOilSoapAttempts_() {
+  var now = new Date();
+  var dd = String(now.getDate());
+  var mm = String(now.getMonth() + 1);
+  var yyyy = String(now.getFullYear());
+  return [
+    {
+      action: 'CurrentOilPrice',
+      resultTag: 'CurrentOilPriceResult',
+      paramsXml: '<Language>TH</Language>'
+    },
+    {
+      action: 'CurrentOilPrice',
+      resultTag: 'CurrentOilPriceResult',
+      paramsXml: '<Language>EN</Language>'
+    },
+    {
+      action: 'GetOilPrice',
+      resultTag: 'GetOilPriceResult',
+      paramsXml: '<Language>TH</Language><DD>' + dd + '</DD><MM>' + mm + '</MM><YYYY>' + yyyy + '</YYYY>'
+    },
+    {
+      action: 'GetOilPrice',
+      resultTag: 'GetOilPriceResult',
+      paramsXml: '<Language>EN</Language><DD>' + dd + '</DD><MM>' + mm + '</MM><YYYY>' + yyyy + '</YYYY>'
+    }
+  ];
+}
+
+function callOilSoap_(action, paramsXml) {
+  var meta = getOilServiceMeta_();
+  var envelope =
+    '<?xml version="1.0" encoding="utf-8"?>' +
+    '<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ' +
+    'xmlns:xsd="http://www.w3.org/2001/XMLSchema" ' +
+    'xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">' +
+    '<soap:Body>' +
+    '<' + action + ' xmlns="' + meta.namespace + '">' +
+    paramsXml +
+    '</' + action + '>' +
+    '</soap:Body>' +
+    '</soap:Envelope>';
+
+  var res = UrlFetchApp.fetch(meta.url, {
+    method: 'post',
+    contentType: 'text/xml; charset=utf-8',
+    headers: {
+      SOAPAction: '"' + meta.actionBase + action + '"'
+    },
+    payload: envelope,
+    muteHttpExceptions: true
+  });
+
+  var code = res.getResponseCode();
+  var body = res.getContentText();
+  if (code >= 400) {
+    throw new Error('HTTP ' + code + ' ' + trimForLog_(body));
+  }
+  if (!body || body.indexOf('<') === -1) {
+    throw new Error('invalid SOAP response');
+  }
+  if (body.indexOf('Object reference not set') !== -1) {
+    throw new Error('upstream null-reference error');
+  }
+  return body;
+}
+
+function parseOilSoapRecords_(soapXmlText, resultTagName) {
+  var doc = XmlService.parse(soapXmlText);
+  var root = doc.getRootElement();
+  var resultNode = findElementByLocalName_(root, resultTagName);
+  if (!resultNode) return [];
+  var raw = resultNode.getText() || '';
+  if (!raw) return [];
+
+  var innerXml = raw;
+  if (raw.indexOf('&lt;') !== -1) {
+    innerXml = raw
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&amp;/g, '&');
+  }
+  if (innerXml.indexOf('<') === -1) {
+    var parsedJson = tryParseJson_(innerXml);
+    if (!parsedJson) return [];
+    var jsonRecords = [];
+    collectObjectRecords_(parsedJson, jsonRecords);
+    return jsonRecords;
+  }
+
+  var innerDoc = XmlService.parse(innerXml);
+  var records = [];
+  collectRecordElements_(innerDoc.getRootElement(), records);
+  return records;
+}
+
+function tryParseJson_(text) {
+  try {
+    return JSON.parse(String(text || '').trim());
+  } catch (e) {
+    return null;
+  }
+}
+
+function collectObjectRecords_(obj, out) {
+  if (!obj) return;
+  if (Object.prototype.toString.call(obj) === '[object Array]') {
+    for (var i = 0; i < obj.length; i++) {
+      collectObjectRecords_(obj[i], out);
+    }
+    return;
+  }
+  if (typeof obj !== 'object') return;
+
+  var keys = Object.keys(obj);
+  var scalarCount = 0;
+  var row = {};
+  for (var j = 0; j < keys.length; j++) {
+    var key = keys[j];
+    var val = obj[key];
+    if (val === null || val === undefined) continue;
+    if (typeof val === 'object') continue;
+    row[String(key).toUpperCase()] = String(val).trim();
+    scalarCount++;
+  }
+  if (scalarCount >= 2) {
+    out.push(row);
+  }
+  for (var k = 0; k < keys.length; k++) {
+    collectObjectRecords_(obj[keys[k]], out);
+  }
+}
+
+function collectRecordElements_(el, out) {
+  var children = el.getChildren();
+  if (!children || children.length === 0) return;
+
+  var hasLeaf = false;
+  for (var i = 0; i < children.length; i++) {
+    if ((children[i].getChildren() || []).length === 0) {
+      hasLeaf = true;
+      break;
+    }
+  }
+  if (hasLeaf) {
+    var row = {};
+    for (var j = 0; j < children.length; j++) {
+      var c = children[j];
+      if ((c.getChildren() || []).length > 0) continue;
+      var key = String(c.getName() || '').toUpperCase();
+      row[key] = String(c.getText() || '').trim();
+    }
+    if (Object.keys(row).length > 0) out.push(row);
+  }
+
+  for (var k = 0; k < children.length; k++) {
+    collectRecordElements_(children[k], out);
+  }
+}
+
+function selectDieselRows_(records, sourceName) {
+  var byDate = {};
+  var byDateScore = {};
+  for (var i = 0; i < records.length; i++) {
+    var row = records[i] || {};
+    var score = getDieselRecordScore_(row);
+    if (score <= 0) continue;
+    var price = pickFirstNumber_(row, [
+      'PRICE', 'OIL_PRICE', 'CURRENTPRICE', 'SELLPRICE', 'PRICEB7', 'RETAIL'
+    ]);
+    if (price === null) continue;
+    var date = pickFirstDate_(row, [
+      'PRICE_DATE', 'UPDATEDATE', 'UPDATE_DATE', 'EFFECTIVE_DATE', 'DATE', 'PRICE_DATE_EN'
+    ]);
+    if (!date) {
+      date = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd');
+    }
+    if (byDateScore[date] !== undefined && byDateScore[date] > score) continue;
+    byDateScore[date] = score;
+    byDate[date] = {
+      date: date,
+      price: price,
+      source: sourceName,
+      note: 'PTTOR Oil Price (Diesel)'
+    };
+  }
+
+  var out = [];
+  for (var d in byDate) {
+    if (byDate.hasOwnProperty(d)) out.push(byDate[d]);
+  }
+  out.sort(function(a, b) { return String(a.date).localeCompare(String(b.date)); });
+  return out;
+}
+
+function getDieselRecordScore_(row) {
+  var txt = '';
+  for (var k in row) {
+    if (!row.hasOwnProperty(k)) continue;
+    txt += ' ' + String(row[k] || '').toLowerCase();
+  }
+  txt = txt.replace(/\s+/g, ' ').trim();
+  if (!txt) return 0;
+
+  // Exclude products that are not the main Diesel price shown on PTTOR page.
+  if (txt.indexOf('premium diesel') !== -1) return 0;
+  if (txt.indexOf('b20') !== -1) return 0;
+  if (txt.indexOf('gasohol') !== -1) return 0;
+  if (txt.indexOf('เบนซิน') !== -1) return 0;
+  if (txt.indexOf('benz') !== -1) return 0;
+  if (txt.indexOf('e20') !== -1 || txt.indexOf('e85') !== -1) return 0;
+  if (txt.indexOf('ซุปเปอร์พาวเวอร์') !== -1) return 0;
+
+  if (txt === 'diesel' || txt === 'ดีเซล') return 100;
+  if (txt.indexOf(' diesel ') !== -1 || txt.indexOf('ดีเซล ') !== -1) return 95;
+  if (txt.indexOf('diesel') !== -1 || txt.indexOf('ดีเซล') !== -1) return 90;
+  if (txt.indexOf('diesel b7') !== -1 || txt.indexOf('b7') !== -1) return 70;
+  return 0;
+}
+
+function pickFirstNumber_(row, keys) {
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i];
+    if (!row.hasOwnProperty(key)) continue;
+    var n = parseMoney(row[key]);
+    if (n !== null) return n;
+  }
+  for (var k in row) {
+    if (!row.hasOwnProperty(k)) continue;
+    if (k.indexOf('PRICE') === -1) continue;
+    var x = parseMoney(row[k]);
+    if (x !== null) return x;
+  }
+  return null;
+}
+
+function pickFirstDate_(row, keys) {
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i];
+    if (!row.hasOwnProperty(key)) continue;
+    var d = parseDate(row[key]);
+    if (d) return d;
+  }
+  for (var k in row) {
+    if (!row.hasOwnProperty(k)) continue;
+    if (k.indexOf('DATE') === -1) continue;
+    var x = parseDate(row[k]);
+    if (x) return x;
+  }
+  return null;
+}
+
+function findElementByLocalName_(el, localName) {
+  if (!el) return null;
+  if (String(el.getName()) === String(localName)) return el;
+  var children = el.getChildren();
+  for (var i = 0; i < children.length; i++) {
+    var found = findElementByLocalName_(children[i], localName);
+    if (found) return found;
+  }
+  return null;
+}
+
+function trimForLog_(s) {
+  var txt = String(s || '').replace(/\s+/g, ' ').trim();
+  if (txt.length <= 200) return txt;
+  return txt.substring(0, 200) + '...';
+}
+
+function buildMasterSnapshotForAudit_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var master = ss.getSheetByName(SHEET_MASTER);
+  if (!master || master.getLastRow() < 2) {
+    return {
+      rows: 0,
+      totals: { recv: 0, pay: 0, oil: 0, margin: 0 },
+      byKey: {}
+    };
+  }
+
+  var rowCount = master.getLastRow() - 1;
+  var colCount = Math.min(master.getLastColumn(), 14);
+  var values = master.getRange(2, 1, rowCount, colCount).getDisplayValues();
+  var byKey = {};
+  var dupCount = {};
+  var totals = { recv: 0, pay: 0, oil: 0, margin: 0 };
+  var kept = 0;
+
+  for (var i = 0; i < values.length; i++) {
+    var rec = normalizeMasterRowForAudit_(values[i]);
+    if (!rec) continue;
+    kept++;
+    totals.recv += rec.recv;
+    totals.pay += rec.pay;
+    totals.oil += rec.oil;
+    totals.margin += rec.margin;
+
+    var baseKey = buildAuditBaseKey_(rec);
+    var n = (dupCount[baseKey] || 0) + 1;
+    dupCount[baseKey] = n;
+    var finalKey = baseKey + '#' + n;
+    rec._key = finalKey;
+    byKey[finalKey] = rec;
+  }
+
+  return {
+    rows: kept,
+    totals: totals,
+    byKey: byKey
+  };
+}
+
+function normalizeMasterRowForAudit_(row) {
+  if (!row || row.length < 13) return null;
+  var date = parseDate(row[0]);
+  if (!date) return null;
+  return {
+    date: date,
+    customer: String(row[1] || '').trim(),
+    vtype: String(row[2] || '').trim(),
+    routeDesc: String(row[3] || '').trim(),
+    route: String(row[4] || '').trim(),
+    driver: String(row[5] || '').trim(),
+    plate: String(row[6] || '').trim(),
+    oil: parseMoney(row[7]) || 0,
+    payee: String(row[8] || '').trim(),
+    recv: parseMoney(row[9]) || 0,
+    pay: parseMoney(row[10]) || 0,
+    margin: parseMoney(row[11]) || 0,
+    pct: parsePercent(row[12]) || 0,
+    sourceMonth: String(row[13] || '').trim()
+  };
+}
+
+function buildAuditBaseKey_(rec) {
+  return [
+    rec.date,
+    rec.customer.toUpperCase(),
+    rec.route.toUpperCase(),
+    rec.driver.toUpperCase(),
+    rec.plate.toUpperCase(),
+    rec.vtype.toUpperCase(),
+    rec.payee.toUpperCase()
+  ].join('|');
+}
+
+function diffAuditSnapshots_(beforeSnap, afterSnap, maxDetailRows) {
+  var beforeMap = (beforeSnap && beforeSnap.byKey) ? beforeSnap.byKey : {};
+  var afterMap = (afterSnap && afterSnap.byKey) ? afterSnap.byKey : {};
+  var maxRows = Math.max(50, maxDetailRows || AUDIT_MAX_DETAIL_ROWS);
+  var details = [];
+  var added = 0;
+  var removed = 0;
+  var changed = 0;
+
+  for (var key in beforeMap) {
+    if (!beforeMap.hasOwnProperty(key)) continue;
+    if (!afterMap.hasOwnProperty(key)) {
+      removed++;
+      if (details.length < maxRows) {
+        details.push(makeAuditDetailRow_('REMOVED', key, beforeMap[key], null, 'row_removed'));
+      }
+      continue;
+    }
+    var cmp = compareAuditRecord_(beforeMap[key], afterMap[key]);
+    if (cmp.changed) {
+      changed++;
+      if (details.length < maxRows) {
+        details.push(makeAuditDetailRow_('CHANGED', key, beforeMap[key], afterMap[key], cmp.fields.join(',')));
+      }
+    }
+  }
+
+  for (var key2 in afterMap) {
+    if (!afterMap.hasOwnProperty(key2)) continue;
+    if (!beforeMap.hasOwnProperty(key2)) {
+      added++;
+      if (details.length < maxRows) {
+        details.push(makeAuditDetailRow_('ADDED', key2, null, afterMap[key2], 'row_added'));
+      }
+    }
+  }
+
+  return {
+    added: added,
+    removed: removed,
+    changed: changed,
+    details: details
+  };
+}
+
+function compareAuditRecord_(a, b) {
+  var out = { changed: false, fields: [] };
+  var textFields = ['date', 'customer', 'vtype', 'route', 'driver', 'plate', 'payee', 'sourceMonth'];
+  var numFields = ['recv', 'pay', 'oil', 'margin', 'pct'];
+
+  for (var i = 0; i < textFields.length; i++) {
+    var tf = textFields[i];
+    if (String(a[tf] || '') !== String(b[tf] || '')) {
+      out.changed = true;
+      out.fields.push(tf);
+    }
+  }
+  for (var j = 0; j < numFields.length; j++) {
+    var nf = numFields[j];
+    var av = Number(a[nf] || 0);
+    var bv = Number(b[nf] || 0);
+    if (Math.abs(av - bv) > 0.000001) {
+      out.changed = true;
+      out.fields.push(nf);
+    }
+  }
+  return out;
+}
+
+function makeAuditDetailRow_(changeType, key, beforeRec, afterRec, changedFields) {
+  var src = afterRec || beforeRec || {};
+  return {
+    changeType: changeType,
+    recordKey: key,
+    date: src.date || '',
+    customer: src.customer || '',
+    route: src.route || '',
+    driver: src.driver || '',
+    plate: src.plate || '',
+    vtype: src.vtype || '',
+    changedFields: changedFields || '',
+    beforeRecv: beforeRec ? beforeRec.recv : null,
+    afterRecv: afterRec ? afterRec.recv : null,
+    beforePay: beforeRec ? beforeRec.pay : null,
+    afterPay: afterRec ? afterRec.pay : null,
+    beforeOil: beforeRec ? beforeRec.oil : null,
+    afterOil: afterRec ? afterRec.oil : null,
+    beforeMargin: beforeRec ? beforeRec.margin : null,
+    afterMargin: afterRec ? afterRec.margin : null,
+    beforePct: beforeRec ? beforeRec.pct : null,
+    afterPct: afterRec ? afterRec.pct : null
+  };
+}
+
+function writeSyncAuditReport_(runId, beforeSnap, afterSnap, context) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var logSheet = getOrCreateSheet(ss, SHEET_SYNC_AUDIT_LOG);
+  var detailSheet = getOrCreateSheet(ss, SHEET_SYNC_AUDIT_DETAIL);
+  var diff = diffAuditSnapshots_(beforeSnap, afterSnap, AUDIT_MAX_DETAIL_ROWS);
+  var nowIso = new Date().toISOString();
+
+  var hasErrors = context && context.stepErrors && context.stepErrors.length > 0;
+  var hasSyncErrors = context && context.syncErrors && context.syncErrors.length > 0;
+  var status = hasErrors ? 'FAILED' : (hasSyncErrors ? 'PARTIAL' : 'SUCCESS');
+
+  ensureAuditLogHeader_(logSheet);
+  ensureAuditDetailHeader_(detailSheet);
+
+  logSheet.appendRow([
+    nowIso,
+    runId,
+    status,
+    (context && context.durationMs) || 0,
+    (beforeSnap && beforeSnap.rows) || 0,
+    (afterSnap && afterSnap.rows) || 0,
+    ((afterSnap && afterSnap.rows) || 0) - ((beforeSnap && beforeSnap.rows) || 0),
+    diff.added,
+    diff.removed,
+    diff.changed,
+    (beforeSnap && beforeSnap.totals ? beforeSnap.totals.recv : 0),
+    (afterSnap && afterSnap.totals ? afterSnap.totals.recv : 0),
+    ((afterSnap && afterSnap.totals ? afterSnap.totals.recv : 0) - (beforeSnap && beforeSnap.totals ? beforeSnap.totals.recv : 0)),
+    (beforeSnap && beforeSnap.totals ? beforeSnap.totals.pay : 0),
+    (afterSnap && afterSnap.totals ? afterSnap.totals.pay : 0),
+    ((afterSnap && afterSnap.totals ? afterSnap.totals.pay : 0) - (beforeSnap && beforeSnap.totals ? beforeSnap.totals.pay : 0)),
+    (beforeSnap && beforeSnap.totals ? beforeSnap.totals.oil : 0),
+    (afterSnap && afterSnap.totals ? afterSnap.totals.oil : 0),
+    ((afterSnap && afterSnap.totals ? afterSnap.totals.oil : 0) - (beforeSnap && beforeSnap.totals ? beforeSnap.totals.oil : 0)),
+    (beforeSnap && beforeSnap.totals ? beforeSnap.totals.margin : 0),
+    (afterSnap && afterSnap.totals ? afterSnap.totals.margin : 0),
+    ((afterSnap && afterSnap.totals ? afterSnap.totals.margin : 0) - (beforeSnap && beforeSnap.totals ? beforeSnap.totals.margin : 0)),
+    (context && context.stepErrors ? context.stepErrors.join(' | ') : ''),
+    (context && context.syncErrors ? context.syncErrors.map(function(x){ return x.sheet + ':' + x.error; }).join(' | ') : '')
+  ]);
+
+  formatLastAuditLogRow_(logSheet);
+
+  var detailRowsWritten = 0;
+  if (diff.details.length > 0) {
+    var rows = [];
+    for (var i = 0; i < diff.details.length; i++) {
+      var d = diff.details[i];
+      rows.push([
+        nowIso,
+        runId,
+        status,
+        d.changeType,
+        d.recordKey,
+        d.date,
+        d.customer,
+        d.route,
+        d.vtype,
+        d.driver,
+        d.plate,
+        d.changedFields,
+        d.beforeRecv,
+        d.afterRecv,
+        d.beforePay,
+        d.afterPay,
+        d.beforeOil,
+        d.afterOil,
+        d.beforeMargin,
+        d.afterMargin,
+        d.beforePct,
+        d.afterPct
+      ]);
+    }
+    var startRow = detailSheet.getLastRow() + 1;
+    detailSheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
+    formatAuditDetailRows_(detailSheet, startRow, rows.length);
+    detailRowsWritten = rows.length;
+  }
+
+  return {
+    runId: runId,
+    status: status,
+    added: diff.added,
+    removed: diff.removed,
+    changed: diff.changed,
+    detailRowsWritten: detailRowsWritten
+  };
+}
+
+function ensureAuditLogHeader_(sheet) {
+  var headers = [[
+    'Timestamp', 'Run ID', 'Status', 'Duration (ms)',
+    'Before Rows', 'After Rows', 'Delta Rows',
+    'Added', 'Removed', 'Changed',
+    'Before Recv', 'After Recv', 'Delta Recv',
+    'Before Pay', 'After Pay', 'Delta Pay',
+    'Before Oil', 'After Oil', 'Delta Oil',
+    'Before Margin', 'After Margin', 'Delta Margin',
+    'Step Errors', 'Sync Errors'
+  ]];
+  var current = sheet.getRange(1, 1, 1, headers[0].length).getDisplayValues()[0];
+  var changed = false;
+  for (var i = 0; i < headers[0].length; i++) {
+    if (String(current[i] || '') !== headers[0][i]) {
+      changed = true;
+      break;
+    }
+  }
+  if (changed || sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, headers[0].length).setValues(headers);
+  }
+  var hr = sheet.getRange(1, 1, 1, headers[0].length);
+  hr.setFontWeight('bold')
+    .setBackground('#0f172a')
+    .setFontColor('#f8fafc')
+    .setHorizontalAlignment('center');
+  sheet.setFrozenRows(1);
+  if (sheet.getLastColumn() < headers[0].length) {
+    sheet.insertColumnsAfter(sheet.getLastColumn(), headers[0].length - sheet.getLastColumn());
+  }
+  if (changed || sheet.getLastRow() <= 1) {
+    var widthMap = [180, 130, 90, 110, 100, 100, 100, 90, 90, 90, 110, 110, 110, 110, 110, 110, 110, 110, 110, 120, 120, 120, 260, 260];
+    for (var w = 0; w < widthMap.length; w++) {
+      sheet.setColumnWidth(w + 1, widthMap[w]);
+    }
+  }
+}
+
+function ensureAuditDetailHeader_(sheet) {
+  var headers = [[
+    'Timestamp', 'Run ID', 'Status', 'Change Type', 'Record Key',
+    'Date', 'Customer', 'Route', 'Vehicle Type', 'Driver', 'Plate',
+    'Changed Fields',
+    'Before Recv', 'After Recv',
+    'Before Pay', 'After Pay',
+    'Before Oil', 'After Oil',
+    'Before Margin', 'After Margin',
+    'Before Pct', 'After Pct'
+  ]];
+  var current = sheet.getRange(1, 1, 1, headers[0].length).getDisplayValues()[0];
+  var changed = false;
+  for (var i = 0; i < headers[0].length; i++) {
+    if (String(current[i] || '') !== headers[0][i]) {
+      changed = true;
+      break;
+    }
+  }
+  if (changed || sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, headers[0].length).setValues(headers);
+  }
+  var hr = sheet.getRange(1, 1, 1, headers[0].length);
+  hr.setFontWeight('bold')
+    .setBackground('#111827')
+    .setFontColor('#f9fafb')
+    .setHorizontalAlignment('center');
+  sheet.setFrozenRows(1);
+  if (changed || sheet.getLastRow() <= 1) {
+    var widthMap = [180, 130, 90, 100, 260, 100, 130, 180, 110, 150, 120, 180, 110, 110, 110, 110, 110, 110, 110, 110, 100, 100];
+    for (var w = 0; w < widthMap.length; w++) {
+      sheet.setColumnWidth(w + 1, widthMap[w]);
+    }
+  }
+}
+
+function formatLastAuditLogRow_(sheet) {
+  var r = sheet.getLastRow();
+  if (r < 2) return;
+  var rowRange = sheet.getRange(r, 1, 1, sheet.getLastColumn());
+  rowRange.setFontWeight('normal').setFontColor('#0f172a').setBackground('#ffffff');
+  sheet.getRange(r, 3).setFontWeight('bold');
+  var status = String(sheet.getRange(r, 3).getDisplayValue() || '');
+  var color = status === 'SUCCESS' ? '#166534' : (status === 'PARTIAL' ? '#9a3412' : '#991b1b');
+  sheet.getRange(r, 3).setFontColor(color);
+  sheet.getRange(r, 4, 1, 18).setNumberFormat('#,##0.00');
+}
+
+function formatAuditDetailRows_(sheet, startRow, rowCount) {
+  if (rowCount <= 0) return;
+  var colCount = 22;
+  var range = sheet.getRange(startRow, 1, rowCount, colCount);
+  range.setFontWeight('normal').setFontColor('#0f172a').setBackground('#ffffff');
+  sheet.getRange(startRow, 13, rowCount, 10).setNumberFormat('#,##0.00');
+  var typeValues = sheet.getRange(startRow, 4, rowCount, 1).getDisplayValues();
+  for (var i = 0; i < rowCount; i++) {
+    var type = String(typeValues[i][0] || '');
+    var bg = type === 'ADDED' ? '#ecfdf5' : (type === 'REMOVED' ? '#fef2f2' : '#eff6ff');
+    sheet.getRange(startRow + i, 1, 1, colCount).setBackground(bg);
+    var typeCell = sheet.getRange(startRow + i, 4);
+    typeCell.setFontWeight('bold');
+    if (type === 'ADDED') typeCell.setFontColor('#166534');
+    else if (type === 'REMOVED') typeCell.setFontColor('#b91c1c');
+    else typeCell.setFontColor('#1d4ed8');
+  }
 }
 
 function systemStatusReport() {
@@ -470,6 +1176,10 @@ function systemStatusReport() {
   };
 }
 
+var SHEET_SYNC_AUDIT_LOG = 'SYNC_AUDIT_LOG';
+var SHEET_SYNC_AUDIT_DETAIL = 'SYNC_AUDIT_DETAIL';
+var AUDIT_MAX_DETAIL_ROWS = 400;
+
 function dailyBatchJobCore_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   Logger.log('[dailyBatchJob] === START ===');
@@ -480,6 +1190,17 @@ function dailyBatchJobCore_() {
   var syncReport = [];
   var oilReport = { rows: 0, source: '-', latestDate: null };
   var syncErrors = [];
+  var auditWarnings = [];
+  var auditResult = null;
+  var beforeSnapshot = null;
+  var runId = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyyMMdd_HHmmss');
+
+  try {
+    beforeSnapshot = buildMasterSnapshotForAudit_();
+  } catch (auditBeforeErr) {
+    auditWarnings.push('audit before-snapshot failed: ' + auditBeforeErr.message);
+    Logger.log('[dailyBatchJob] Audit before-snapshot ERROR: ' + auditBeforeErr.message);
+  }
 
   try {
     syncReport = importAllConfiguredSheetsSilentWithReport();
@@ -529,6 +1250,19 @@ function dailyBatchJobCore_() {
     }
   }
 
+  try {
+    var afterSnapshot = buildMasterSnapshotForAudit_();
+    auditResult = writeSyncAuditReport_(runId, beforeSnapshot, afterSnapshot, {
+      durationMs: new Date().getTime() - t0,
+      syncErrors: syncErrors,
+      stepErrors: stepErrors,
+      oilReport: oilReport
+    });
+  } catch (auditErr) {
+    auditWarnings.push('audit report failed: ' + auditErr.message);
+    Logger.log('[dailyBatchJob] Audit report ERROR: ' + auditErr.message);
+  }
+
   var status = systemStatusReport();
   var totalMs = new Date().getTime() - t0;
   var lines = [];
@@ -559,8 +1293,31 @@ function dailyBatchJobCore_() {
       lines.push('- ' + syncErrors[k].sheet + ': ' + syncErrors[k].error);
     }
   }
+  if (auditResult) {
+    lines.push(
+      'Sync audit: added=' + auditResult.added +
+      ', removed=' + auditResult.removed +
+      ', changed=' + auditResult.changed
+    );
+  }
+  if (auditWarnings.length > 0) {
+    lines.push('Sync audit warnings: ' + auditWarnings.join(' | '));
+  }
 
   var summaryText = lines.join('\n');
+  if (auditResult) {
+    Logger.log(
+      '[dailyBatchJob] Audit summary: added=' + auditResult.added +
+      ' removed=' + auditResult.removed +
+      ' changed=' + auditResult.changed +
+      ' detailRows=' + auditResult.detailRowsWritten
+    );
+  }
+  if (auditWarnings.length > 0) {
+    for (var aw = 0; aw < auditWarnings.length; aw++) {
+      Logger.log('[dailyBatchJob] Audit warning: ' + auditWarnings[aw]);
+    }
+  }
   Logger.log('[dailyBatchJob] === END === Total time: ' + totalMs + 'ms');
   Logger.log(summaryText);
   ss.toast(summaryText, 'Batch Report', 20);
@@ -572,7 +1329,9 @@ function dailyBatchJobCore_() {
     oilRows: oilReport.rows,
     syncErrors: syncErrors,
     errors: stepErrors,
-    status: status
+    status: status,
+    audit: auditResult,
+    auditWarnings: auditWarnings
   };
 }
 
@@ -600,7 +1359,7 @@ function importAllConfiguredSheetsSilentWithReport() {
     var oldRows = sheet.getLastRow() > 0 ? sheet.getLastRow() - 1 : 0;
 
     try {
-      ss.toast('เธเธณเธฅเธฑเธเธ”เธถเธเธเนเธญเธกเธนเธฅเธชเธณเธซเธฃเธฑเธ ' + sheetName + '...', 'Sync (' + (i + 1) + '/12)', 3);
+      ss.toast('กำลังดึงข้อมูลสำหรับ ' + sheetName + '...', 'Sync (' + (i + 1) + '/12)', 3);
       var sourceSheetName = SOURCE_SHEET_NAMES[sheetName] || 'SUMDATA';
       Logger.log('[' + sheetName + '] Fetching from: ' + sourceUrl + ' sheet=' + sourceSheetName);
       var data = fetchSourceData(sourceUrl, sourceSheetName);
@@ -650,9 +1409,9 @@ function rebuildMasterSheet() {
       break;
     }
   }
-  var headers = ['เธงเธฑเธเธ—เธตเน', 'เธฅเธนเธเธเนเธฒ', 'เธเธฃเธฐเน€เธ เธ—เธฃเธ–', 'เธเธทเนเธญเน€เธชเนเธเธ—เธฒเธ', 'เน€เธชเนเธเธ—เธฒเธ (Route)',
-                 'เธเธทเนเธญเธเธเธฃ', 'เธ—เธฐเน€เธเธตเธขเธ', 'เธเนเธฒเธขเธชเธณเธฃเธญเธเธเนเธณเธกเธฑเธ', 'เธเธทเนเธญเธเธนเนเธฃเธฑเธเนเธญเธ', 'เธฃเธฒเธเธฒเธฃเธฑเธ',
-                 'เธฃเธฒเธเธฒเธเนเธฒเธข', 'เธชเนเธงเธเธ•เนเธฒเธ', 'เธเธณเนเธฃ %', 'SourceMonth'];
+  var headers = ['วันที่', 'ลูกค้า', 'ประเภทรถ', 'ชื่อเส้นทาง', 'เส้นทาง (Route)',
+                 'ชื่อพขร.', 'ทะเบียน', 'จ่ายสำรองน้ำมัน', 'ชื่อผู้รับโอน', 'ราคารับ',
+                 'ราคาจ่าย', 'ส่วนต่าง', 'กำไร %', 'SourceMonth'];
   if (sourceSheet) {
     var srcHeaders = sourceSheet.getRange(1, 1, 1, sourceSheet.getLastColumn()).getDisplayValues()[0];
     if (srcHeaders.length >= 13) headers = srcHeaders.concat(['SourceMonth']);
@@ -751,7 +1510,7 @@ function rebuildCaches() {
     Logger.log('[rebuildCaches] SAMPLE ROW[0]: ' + JSON.stringify(values[0]));
   }
 
-  // Pre-compute anomaly groups once (O(n) instead of O(nยฒ) per trip)
+  // Pre-compute anomaly groups once (O(n) instead of O(n^2) per trip)
   Logger.log('[rebuildCaches] Building anomaly group stats...');
   var groupStats = buildAnomalyGroupStats(trips);
 
@@ -828,9 +1587,9 @@ function parseTripRow(row) {
   if (!row || row.length < 13) return null;
 
   // Column mapping for 13-column contiguous layout:
-  // [0:เธงเธฑเธเธ—เธตเน, 1:เธฅเธนเธเธเนเธฒ, 2:เธเธฃเธฐเน€เธ เธ—เธฃเธ–, 3:เธเธทเนเธญเน€เธชเนเธเธ—เธฒเธ, 4:เน€เธชเนเธเธ—เธฒเธ(Route),
-  //  5:เธเธทเนเธญเธเธเธฃ, 6:เธ—เธฐเน€เธเธตเธขเธ, 7:เธเนเธฒเธขเธชเธณเธฃเธญเธเธเนเธณเธกเธฑเธ, 8:เธเธทเนเธญเธเธนเนเธฃเธฑเธเนเธญเธ,
-  //  9:เธฃเธฒเธเธฒเธฃเธฑเธ, 10:เธฃเธฒเธเธฒเธเนเธฒเธข, 11:เธชเนเธงเธเธ•เนเธฒเธ, 12:เธเธณเนเธฃ%]
+  // [0:วันที่, 1:ลูกค้า, 2:ประเภทรถ, 3:ชื่อเส้นทาง, 4:เส้นทาง(Route),
+  //  5:ชื่อพขร., 6:ทะเบียน, 7:จ่ายสำรองน้ำมัน, 8:ชื่อผู้รับโอน,
+  //  9:ราคารับ, 10:ราคาจ่าย, 11:ส่วนต่าง, 12:กำไร%]
 
   var date = parseDate(String(row[0] || ''));
   var customer = mapCustomer(String(row[1] || ''));
@@ -878,16 +1637,23 @@ function parseDate(str) {
   }
 
   str = String(str).trim();
-  // Try DD/MM/YYYY
-  var match = str.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+
+  // Try DD/MM/YYYY (allow trailing time)
+  var match = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+.*)?$/);
   if (match) {
     var year = parseInt(match[3], 10);
     if (year > 2500) year -= 543; // Buddhist to Gregorian
     return year + '-' + pad2(match[2]) + '-' + pad2(match[1]);
   }
-  // Try YYYY-MM-DD
-  match = str.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (match) return str;
+
+  // Try YYYY-MM-DD and ISO datetime (e.g. 2026-05-19T05:00)
+  match = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s].*)?$/);
+  if (match) return match[1] + '-' + pad2(match[2]) + '-' + pad2(match[3]);
+
+  // Try YYYY/MM/DD and datetime variant
+  match = str.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})(?:[T\s].*)?$/);
+  if (match) return match[1] + '-' + pad2(match[2]) + '-' + pad2(match[3]);
+
   // Try Google Sheets date object (serialized as number)
   if (!isNaN(parseFloat(str))) {
     var d = new Date((parseFloat(str) - 25569) * 86400 * 1000);
@@ -921,14 +1687,18 @@ function isCompanyByPlateVtype_(plate, vtype) {
   if (!p || !v) return false;
 
   var companyPairs = {
-    '3เธ’เธ—2757|4W': true,
-    '3เธ’เธข7931|4WJ': true,
-    '3เธ’เธข7928|4WJ': true,
+    '3บท2757|4W': true,
+    '3ฒท2757|4W': true,
+    '3บย7931|4WJ': true,
+    '3ฒย7931|4WJ': true,
+    '3บย7928|4WJ': true,
+    '3ฒย7928|4WJ': true,
     '707616|6W': true,
     '707613|6W': true,
     '717486|6W': true,
-    '3เธ’เธ—2758|4W': true,
-    '73-2203/73-2204|เน€เธ—เธฃเธฅเน€เธฅเธญเธฃเน': true
+    '3บท2758|4W': true,
+    '3ฒท2758|4W': true,
+    '73-2203/73-2204|เทรลเลอร์': true
   };
 
   return !!companyPairs[p + '|' + v];
@@ -937,7 +1707,7 @@ function isCompanyByPlateVtype_(plate, vtype) {
 function isCompanyByPayeeDriver_(payee, driver) {
   var p = String(payee || '').trim();
   var d = String(driver || '').trim();
-  return p === d || p.indexOf('เธเธฃเธดเธฉเธฑเธ—') !== -1 || p === '-' || p === '';
+  return p === d || p.indexOf('บริษัท') !== -1 || p === '-' || p === '';
 }
 
 function isCompanyTrip_(payee, driver, plate, vtype) {
@@ -946,7 +1716,7 @@ function isCompanyTrip_(payee, driver, plate, vtype) {
 
 function parseMoney(val) {
   if (val === null || val === undefined) return null;
-  var str = String(val).trim().replace(/,/g, '').replace(/เธฟ/g, '').replace(/\u0E3F/g, '');
+  var str = String(val).trim().replace(/,/g, '').replace(/บาท/g, '').replace(/\u0E3F/g, '');
   var num = parseFloat(str);
   return isNaN(num) ? null : num;
 }
@@ -962,7 +1732,7 @@ function parsePercent(val) {
 // ANOMALY DETECTION (OPTIMIZED)
 // ============================================
 
-// Pre-compute group stats once per batch (O(n) instead of O(nยฒ))
+// Pre-compute group stats once per batch (O(n) instead of O(n^2))
 function buildAnomalyGroupStats(trips) {
   var groups = {};
   var tripStats = {};
@@ -1018,12 +1788,12 @@ function getAnomalies(trip, allTrips, groupStats) {
   // 1. Loss
   if (mg < 0) {
     var lp = trip.recv > 0 ? Math.abs(mg / trip.recv * 100) : 0;
-    causes.push({ text: 'เธเธฒเธ”เธ—เธธเธ ' + Math.round(lp) + '%', color: 'red' });
+    causes.push({ text: 'ขาดทุน ' + Math.round(lp) + '%', color: 'red' });
   }
 
   // 2. High oil reserve > 50% of pay
   if ((trip.oil || 0) > (trip.pay || 0) * 0.5 && (trip.pay || 0) > 0) {
-    causes.push({ text: 'เธชเธณเธฃเธญเธเธเนเธณเธกเธฑเธ>50%', color: 'orange' });
+    causes.push({ text: 'สำรองน้ำมัน>50%', color: 'orange' });
   }
 
   // 3-5. Use pre-computed group stats (O(1) lookup instead of O(n) filter)
@@ -1035,13 +1805,13 @@ function getAnomalies(trip, allTrips, groupStats) {
       var to = trip.oil || 0;
       var tr = trip.recv || 0;
       if (stats.avgPay > 0 && tp > stats.avgPay * 1.05 && stats.hasHighPay) {
-        causes.push({ text: 'เธฃเธฒเธเธฒเธเนเธฒเธขเนเธเธเธเธงเนเธฒเธเนเธฒเน€เธเธฅเธตเนเธข', color: 'purple' });
+        causes.push({ text: 'ราคาจ่ายแพงกว่าค่าเฉลี่ย', color: 'purple' });
       }
       if (stats.avgOil > 0 && to > stats.avgOil * 1.10 && stats.hasHighOil) {
-        causes.push({ text: 'เธชเธณเธฃเธญเธเธเนเธณเธกเธฑเธเนเธเธเธเธงเนเธฒเธเนเธฒเน€เธเธฅเธตเนเธข', color: 'orange' });
+        causes.push({ text: 'สำรองน้ำมันแพงกว่าค่าเฉลี่ย', color: 'orange' });
       }
       if (stats.avgRecv > 0 && tr < stats.avgRecv * 0.95 && stats.hasLowRecv) {
-        causes.push({ text: 'เธฃเธฒเธเธฒเธฃเธฑเธเธ•เนเธณเธเธงเนเธฒเธเนเธฒเน€เธเธฅเธตเนเธข', color: 'blue' });
+        causes.push({ text: 'ราคารับต่ำกว่าค่าเฉลี่ย', color: 'blue' });
       }
     }
   }
@@ -1149,13 +1919,17 @@ function calculateRouteRanking(trips) {
   var routeData = {};
   for (var i = 0; i < trips.length; i++) {
     var t = trips[i];
-    if (!routeData[t.route]) {
-      routeData[t.route] = { route: t.route, customer: t.customer, desc: t.routeDesc, margin: 0, trips: 0, recv: 0, loss: 0 };
+    var route = String(t.route || '').trim();
+    var customer = String(t.customer || '').trim();
+    var vtype = String(t.vtype || '').trim();
+    var key = customer + '|' + route + '|' + vtype;
+    if (!routeData[key]) {
+      routeData[key] = { route: route, customer: customer, vtype: vtype, desc: t.routeDesc, margin: 0, trips: 0, recv: 0, loss: 0 };
     }
-    routeData[t.route].margin += (t.margin || 0);
-    routeData[t.route].trips++;
-    routeData[t.route].recv += (t.recv || 0);
-    if ((t.margin || 0) < 0) routeData[t.route].loss++;
+    routeData[key].margin += (t.margin || 0);
+    routeData[key].trips++;
+    routeData[key].recv += (t.recv || 0);
+    if ((t.margin || 0) < 0) routeData[key].loss++;
   }
 
   var list = Object.values(routeData);
@@ -1163,10 +1937,13 @@ function calculateRouteRanking(trips) {
     r.avgMargin = r.trips > 0 ? r.margin / r.trips : 0;
     r.pct = r.recv > 0 ? (r.margin / r.recv * 100) : 0;
   });
-  list.sort(function(a, b) { return b.margin - a.margin; });
 
-  var profitRoutes = list.filter(function(r) { return r.margin > 0; });
-  var lossRoutes = list.filter(function(r) { return r.margin < 0; });
+  var profitRoutes = list
+    .filter(function(r) { return r.margin > 0; })
+    .sort(function(a, b) { return b.margin - a.margin; });
+  var lossRoutes = list
+    .filter(function(r) { return r.margin < 0; })
+    .sort(function(a, b) { return a.margin - b.margin; });
   var zeroRoutes = list.filter(function(r) { return r.margin === 0; });
   return {
     top: profitRoutes,
@@ -1629,7 +2406,7 @@ function getApiInfo() {
   };
 }
 
-// jsonOut เธ–เธนเธเธเธฃเธฐเธเธฒเธจเนเธงเนเนเธ config.gs เธเธฃเนเธญเธก CORS headers เนเธฅเนเธง
+// jsonOut ถูกประกาศไว้ใน config.gs พร้อม CORS headers แล้ว
 
 function getSummaryCache() {
   var jsonStr = readLargeJsonFromSheet(SHEET_SUMMARY_CACHE);
@@ -1746,12 +2523,14 @@ function getCompareData(startA, endA, startB, endB) {
 function getOilPriceData() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(SHEET_OIL_DIESEL);
+  var meta = getOilServiceMeta_();
   if (!sheet) {
     return {
-      source: 'PTTOR',
-      product: 'เธ”เธตเน€เธเธฅ',
-      productLabel: 'เธ”เธตเน€เธเธฅ (เธฃเธฒเธเธฒเธเธฒเธขเธเธฅเธตเธ เธเธ—เธก. เนเธฅเธฐเธเธฃเธดเธกเธ“เธ‘เธฅ)',
-      unit: 'เธเธฒเธ—/เธฅเธดเธ•เธฃ',
+      source: meta.sourceName,
+      sourceUrl: meta.sourceUrl,
+      product: 'ดีเซล',
+      productLabel: 'ดีเซล (ราคาขายปลีก กทม. และปริมณฑล)',
+      unit: 'บาท/ลิตร',
       lastFetch: new Date().toISOString(),
       prices: []
     };
@@ -1787,10 +2566,11 @@ function getOilPriceData() {
   });
 
   return {
-    source: 'PTTOR',
-    product: 'เธ”เธตเน€เธเธฅ',
-    productLabel: 'เธ”เธตเน€เธเธฅ (เธฃเธฒเธเธฒเธเธฒเธขเธเธฅเธตเธ เธเธ—เธก. เนเธฅเธฐเธเธฃเธดเธกเธ“เธ‘เธฅ)',
-    unit: 'เธเธฒเธ—/เธฅเธดเธ•เธฃ',
+    source: meta.sourceName,
+    sourceUrl: meta.sourceUrl,
+    product: 'ดีเซล',
+    productLabel: 'ดีเซล (ราคาขายปลีก กทม. และปริมณฑล)',
+    unit: 'บาท/ลิตร',
     lastFetch: new Date().toISOString(),
     prices: prices
   };
@@ -1804,7 +2584,7 @@ function getRoutesList() {
   var values = master.getRange(2, 1, master.getLastRow() - 1, master.getLastColumn()).getDisplayValues();
   var routes = {};
   for (var i = 0; i < values.length; i++) {
-    var route = String(values[i][4] || ''); // Route column (index 4 = เน€เธชเนเธเธ—เธฒเธ)
+    var route = String(values[i][4] || ''); // Route column (index 4 = เส้นทาง)
     var customer = mapCustomer(String(values[i][1] || ''));
     if (route) {
       routes[route] = routes[route] || { route: route, customers: {} };
@@ -2018,23 +2798,23 @@ function testSystemIntegrity() {
   if (errors.length > 0) {
     Logger.log('=== ERRORS ===');
     for (var i = 0; i < errors.length; i++) {
-      Logger.log('โ ' + errors[i]);
+      Logger.log('ERROR: ' + errors[i]);
     }
   }
 
   if (warnings.length > 0) {
     Logger.log('=== WARNINGS ===');
     for (var i = 0; i < warnings.length; i++) {
-      Logger.log('โ ๏ธ ' + warnings[i]);
+      Logger.log('WARNING: ' + warnings[i]);
     }
   }
 
   if (errors.length === 0) {
     Logger.log('=== SYSTEM READY FOR DEPLOYMENT ===');
-    SpreadsheetApp.getActiveSpreadsheet().toast('โ… System integrity check passed', 'Ready to Deploy', 5);
+    SpreadsheetApp.getActiveSpreadsheet().toast('System integrity check passed', 'Ready to Deploy', 5);
   } else {
     Logger.log('=== FIX ERRORS BEFORE DEPLOYING ===');
-    SpreadsheetApp.getActiveSpreadsheet().toast('โ Found ' + errors.length + ' errors', 'Fix before Deploy', 10);
+    SpreadsheetApp.getActiveSpreadsheet().toast('Found ' + errors.length + ' errors', 'Fix before Deploy', 10);
   }
 
   return { passed: errors.length === 0, errors: errors, warnings: warnings };
@@ -2099,16 +2879,459 @@ function testOptimization() {
 
   if (errors.length === 0) {
     Logger.log('=== ALL TESTS PASSED ===');
-    SpreadsheetApp.getActiveSpreadsheet().toast('โ… Optimization test passed in ' + totalTime + 'ms', 'Regression Test', 5);
+    SpreadsheetApp.getActiveSpreadsheet().toast('Optimization test passed in ' + totalTime + 'ms', 'Regression Test', 5);
   } else {
     Logger.log('=== TEST FAILURES ===');
     for (var i = 0; i < errors.length; i++) {
       Logger.log('FAIL: ' + errors[i]);
     }
-    SpreadsheetApp.getActiveSpreadsheet().toast('โ Test failed: ' + errors.length + ' errors', 'Regression Test', 10);
+    SpreadsheetApp.getActiveSpreadsheet().toast('Test failed: ' + errors.length + ' errors', 'Regression Test', 10);
   }
 
   return { passed: errors.length === 0, errors: errors, timeMs: totalTime };
+}
+
+/**
+ * Full backend QA suite (read-only checks; no rebuild/write side effects).
+ * Run this before deployment to verify data contract, payload shapes, and timing.
+ */
+function runBackendQaSuite() {
+  var startedAt = new Date();
+  var report = {
+    ok: true,
+    startedAt: startedAt.toISOString(),
+    finishedAt: null,
+    durationMs: 0,
+    errors: [],
+    warnings: [],
+    checks: [],
+    timingsMs: {}
+  };
+
+  qaStep_(report, 'apiInfo', function() {
+    var info = getApiInfo();
+    var configured = (info.configuredMonths || []).length;
+    var missing = (info.missingMonths || []).length;
+    if (!info.ok) throw new Error('apiInfo.ok is false');
+    if (configured === 0) {
+      report.warnings.push('No source month is configured in SHEET_SOURCES.');
+    }
+    return { configuredMonths: configured, missingMonths: missing };
+  });
+
+  qaStep_(report, 'systemStatusReport', function() {
+    var status = systemStatusReport();
+    if (!status || !status.sheets) throw new Error('systemStatusReport shape invalid');
+    return {
+      masterRows: status.sheets.masterRows,
+      summaryRows: status.sheets.summaryCacheRows,
+      tripsRows: status.sheets.tripsCacheRows,
+      oilRows: status.sheets.oilRows,
+      contractPassed: status.contract && status.contract.passed
+    };
+  });
+
+  qaStep_(report, 'summaryCache', function() {
+    var summary = getSummaryCache();
+    if (summary && summary.error) throw new Error(summary.error);
+    if (!summary || !summary.summary) throw new Error('summary payload missing summary');
+    var s = summary.summary;
+    if (typeof s.totalTrips !== 'number') throw new Error('summary.totalTrips is not numeric');
+    if (typeof s.totalRevenue !== 'number') throw new Error('summary.totalRevenue is not numeric');
+    if (typeof s.totalMargin !== 'number') throw new Error('summary.totalMargin is not numeric');
+    return {
+      totalTrips: s.totalTrips,
+      totalRevenue: s.totalRevenue,
+      totalMargin: s.totalMargin,
+      avgMarginPct: s.avgMarginPct
+    };
+  });
+
+  qaStep_(report, 'tripsCache', function() {
+    var tripsPayload = getTripsCache(null, null, null, 0, 5000);
+    if (tripsPayload && tripsPayload.error) throw new Error(tripsPayload.error);
+    var trips = tripsPayload.trips || [];
+    if (trips.length === 0) {
+      report.warnings.push('TRIPS_CACHE has 0 rows in first page.');
+      return { rows: 0, sampleDate: null };
+    }
+    var sample = trips[0];
+    var required = ['date', 'customer', 'route', 'vtype', 'driver', 'plate', 'recv', 'pay', 'oil', 'margin'];
+    for (var i = 0; i < required.length; i++) {
+      if (!sample.hasOwnProperty(required[i])) {
+        throw new Error('trip sample missing field: ' + required[i]);
+      }
+    }
+    return {
+      rows: trips.length,
+      total: tripsPayload.total || trips.length,
+      sampleDate: sample.date
+    };
+  });
+
+  qaStep_(report, 'oilPayload', function() {
+    var oil = getOilPriceData();
+    if (!oil || !oil.prices) throw new Error('oil payload missing prices');
+    var prices = oil.prices || [];
+    if (prices.length === 0) {
+      report.warnings.push('Oil payload has no price rows.');
+      return { rows: 0, latestDate: null };
+    }
+    for (var i = 0; i < prices.length; i++) {
+      var p = prices[i];
+      if (!p.period_name) throw new Error('oil row missing period_name at index ' + i);
+      if (typeof p.price !== 'number' || !isFinite(p.price)) {
+        throw new Error('oil row price is invalid at index ' + i);
+      }
+      if (i > 0 && String(prices[i - 1].period_no) > String(p.period_no)) {
+        throw new Error('oil rows are not sorted ascending by period_no');
+      }
+    }
+    var latest = prices[prices.length - 1].period_name;
+    return {
+      rows: prices.length,
+      latestDate: latest,
+      source: oil.source || '-'
+    };
+  });
+
+  qaStep_(report, 'compareSmoke', function() {
+    var parsed = getTripsArrayFromCache_();
+    if (parsed.error) throw new Error(parsed.error);
+    var all = parsed.trips || [];
+    if (all.length < 2) {
+      report.warnings.push('Compare smoke skipped: not enough trips.');
+      return { skipped: true };
+    }
+    var a = all[0].date;
+    var b = all[all.length - 1].date;
+    var cmp = getCompareData(a, a, b, b);
+    if (cmp && cmp.error) throw new Error(cmp.error);
+    if (!cmp || !cmp.rangeA || !cmp.rangeB || !cmp.comparison) {
+      throw new Error('compare payload shape invalid');
+    }
+    return {
+      rangeA: a,
+      rangeB: b,
+      tripDiff: cmp.comparison.tripDiff,
+      marginDiff: cmp.comparison.marginDiff
+    };
+  });
+
+  qaStep_(report, 'contractValidation', function() {
+    var contract = validateFrontendApiContract();
+    if (!contract) throw new Error('contract validation returned empty');
+    if (!contract.passed) {
+      for (var i = 0; i < contract.errors.length; i++) {
+        report.errors.push('contract: ' + contract.errors[i]);
+      }
+    }
+    for (var j = 0; j < contract.warnings.length; j++) {
+      report.warnings.push('contract: ' + contract.warnings[j]);
+    }
+    return {
+      passed: contract.passed,
+      errorCount: contract.errors.length,
+      warningCount: contract.warnings.length
+    };
+  });
+
+  qaStep_(report, 'performance', function() {
+    var perf = {
+      summaryMs: measureCallMs_(function() { getSummaryCache(); }),
+      tripsMs: measureCallMs_(function() { getTripsCache(null, null, null, 0, 5000); }),
+      oilMs: measureCallMs_(function() { getOilPriceData(); }),
+      contractMs: measureCallMs_(function() { validateFrontendApiContract(); })
+    };
+    report.timingsMs = perf;
+    if (perf.tripsMs > 5000) {
+      report.warnings.push('Trips read is slow (>5000ms). Consider cache refresh or payload paging.');
+    }
+    return perf;
+  });
+
+  report.ok = report.errors.length === 0;
+  report.finishedAt = new Date().toISOString();
+  report.durationMs = new Date().getTime() - startedAt.getTime();
+
+  Logger.log('=== BACKEND QA SUITE ===');
+  Logger.log(JSON.stringify(report));
+  SpreadsheetApp.getActiveSpreadsheet().toast(
+    report.ok ? 'Backend QA: PASS' : ('Backend QA: FAIL (' + report.errors.length + ' errors)'),
+    'QA Suite',
+    report.ok ? 5 : 10
+  );
+  return report;
+}
+
+function withSpreadsheetRetry_(fn, label, maxRetries) {
+  var retries = Math.max(1, maxRetries || 3);
+  var lastErr = null;
+  for (var i = 0; i < retries; i++) {
+    try {
+      return fn();
+    } catch (e) {
+      lastErr = e;
+      var msg = String((e && e.message) || e || '');
+      var timeoutLike = msg.indexOf('timed out while accessing document') !== -1 ||
+                        msg.indexOf('Service Spreadsheets timed out') !== -1;
+      if (!timeoutLike || i === retries - 1) break;
+      Utilities.sleep(400 * (i + 1));
+      Logger.log('[withSpreadsheetRetry_] retry ' + (i + 1) + '/' + retries + ' for ' + label + ' due to timeout');
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * Audit-focused readiness test.
+ * - Safe test: no sync, no rebuild, no source fetch
+ * - Verifies snapshot/diff/audit-sheet pipeline is ready
+ */
+function testSyncAuditReadiness() {
+  var startedAt = new Date();
+  var report = {
+    ok: true,
+    startedAt: startedAt.toISOString(),
+    finishedAt: null,
+    durationMs: 0,
+    errors: [],
+    warnings: [],
+    details: {}
+  };
+
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var includeContract = false; // keep this readiness test lightweight and stable
+
+    // 1) Build snapshot from current MASTER
+    var snap = withSpreadsheetRetry_(function() {
+      return buildMasterSnapshotForAudit_();
+    }, 'buildMasterSnapshotForAudit_', 3);
+    report.details.snapshotRows = snap.rows || 0;
+    report.details.snapshotTotals = snap.totals || { recv: 0, pay: 0, oil: 0, margin: 0 };
+
+    // 2) Diff same snapshot should be zero
+    var sameDiff = diffAuditSnapshots_(snap, snap, 50);
+    if (sameDiff.added !== 0 || sameDiff.removed !== 0 || sameDiff.changed !== 0) {
+      report.errors.push('Self diff is not zero (unexpected).');
+    }
+    report.details.selfDiff = {
+      added: sameDiff.added,
+      removed: sameDiff.removed,
+      changed: sameDiff.changed
+    };
+
+    // 3) Ensure audit sheets + styled headers exist
+    var logSheet = withSpreadsheetRetry_(function() {
+      return getOrCreateSheet(ss, SHEET_SYNC_AUDIT_LOG);
+    }, 'getOrCreateSheet(LOG)', 3);
+    var detailSheet = withSpreadsheetRetry_(function() {
+      return getOrCreateSheet(ss, SHEET_SYNC_AUDIT_DETAIL);
+    }, 'getOrCreateSheet(DETAIL)', 3);
+    withSpreadsheetRetry_(function() {
+      ensureAuditLogHeader_(logSheet);
+      ensureAuditDetailHeader_(detailSheet);
+      return true;
+    }, 'ensureAuditHeaders', 3);
+    report.details.auditSheets = {
+      logSheet: SHEET_SYNC_AUDIT_LOG,
+      detailSheet: SHEET_SYNC_AUDIT_DETAIL,
+      logLastRow: logSheet.getLastRow(),
+      detailLastRow: detailSheet.getLastRow()
+    };
+
+    // 4) Optional contract check (heavier)
+    if (includeContract) {
+      var contract = withSpreadsheetRetry_(function() {
+        return validateFrontendApiContract();
+      }, 'validateFrontendApiContract', 2);
+      report.details.contract = {
+        passed: contract.passed,
+        errors: contract.errors.length,
+        warnings: contract.warnings.length
+      };
+      if (!contract.passed) {
+        for (var i = 0; i < contract.errors.length; i++) {
+          report.errors.push('contract: ' + contract.errors[i]);
+        }
+      }
+      for (var j = 0; j < contract.warnings.length; j++) {
+        report.warnings.push('contract: ' + contract.warnings[j]);
+      }
+    } else {
+      report.details.contract = { skipped: true, reason: 'lightweight mode' };
+    }
+
+  } catch (e) {
+    report.errors.push((e && e.message ? e.message : String(e)) + (e && e.stack ? (' | ' + e.stack) : ''));
+  }
+
+  report.ok = report.errors.length === 0;
+  report.finishedAt = new Date().toISOString();
+  report.durationMs = new Date().getTime() - startedAt.getTime();
+
+  Logger.log('=== SYNC AUDIT READINESS TEST ===');
+  Logger.log(JSON.stringify(report));
+  SpreadsheetApp.getActiveSpreadsheet().toast(
+    report.ok ? 'Sync Audit Readiness: PASS' : ('Sync Audit Readiness: FAIL (' + report.errors.length + ')'),
+    'Audit Test',
+    report.ok ? 5 : 10
+  );
+  return report;
+}
+
+function testSyncAuditReadinessFull() {
+  var report = testSyncAuditReadiness();
+  if (!report.ok) return report;
+
+  try {
+    var contract = withSpreadsheetRetry_(function() {
+      return validateFrontendApiContract();
+    }, 'validateFrontendApiContract(full)', 2);
+    report.details.contract = {
+      passed: contract.passed,
+      errors: contract.errors.length,
+      warnings: contract.warnings.length
+    };
+    if (!contract.passed) {
+      for (var i = 0; i < contract.errors.length; i++) {
+        report.errors.push('contract: ' + contract.errors[i]);
+      }
+    }
+    for (var j = 0; j < contract.warnings.length; j++) {
+      report.warnings.push('contract: ' + contract.warnings[j]);
+    }
+  } catch (e) {
+    report.errors.push('contract(full): ' + (e && e.message ? e.message : String(e)));
+  }
+
+  report.ok = report.errors.length === 0;
+  report.finishedAt = new Date().toISOString();
+  Logger.log('=== SYNC AUDIT READINESS FULL TEST ===');
+  Logger.log(JSON.stringify(report));
+  SpreadsheetApp.getActiveSpreadsheet().toast(
+    report.ok ? 'Sync Audit Full: PASS' : ('Sync Audit Full: FAIL (' + report.errors.length + ')'),
+    'Audit Test',
+    report.ok ? 5 : 10
+  );
+  return report;
+}
+
+function testPttorDieselSource() {
+  var report = {
+    ok: true,
+    timestamp: new Date().toISOString(),
+    sourceName: null,
+    sourceUrl: null,
+    fetchedRows: 0,
+    latestFetched: null,
+    latestSheet: null,
+    sampleFetched: [],
+    error: null
+  };
+
+  try {
+    var meta = getOilServiceMeta_();
+    report.sourceName = meta.sourceName;
+    report.sourceUrl = meta.sourceUrl;
+
+    var fetched = fetchOrDieselRows_();
+    var rows = fetched && fetched.rows ? fetched.rows : [];
+    report.fetchedRows = rows.length;
+    if (rows.length > 0) {
+      report.latestFetched = rows[rows.length - 1];
+      report.sampleFetched = rows.slice(Math.max(0, rows.length - 5));
+    }
+
+    var oil = getOilPriceData();
+    var prices = oil && oil.prices ? oil.prices : [];
+    if (prices.length > 0) {
+      report.latestSheet = prices[prices.length - 1];
+    }
+  } catch (e) {
+    report.ok = false;
+    report.error = e && e.message ? e.message : String(e);
+  }
+
+  Logger.log('=== TEST PTTOR DIESEL SOURCE ===');
+  Logger.log(JSON.stringify(report));
+  SpreadsheetApp.getActiveSpreadsheet().toast(
+    report.ok ? 'PTTOR Diesel Source: PASS' : 'PTTOR Diesel Source: FAIL',
+    'Oil Source Test',
+    report.ok ? 5 : 10
+  );
+  return report;
+}
+
+/**
+ * Public runner: refresh diesel rows from PTTOR source into OIL_DIESEL_DATA.
+ * Use this from Apps Script Run menu.
+ */
+function refreshOilDataNow() {
+  var started = new Date();
+  var result = refreshOilDataForApi_();
+  var report = {
+    ok: true,
+    startedAt: started.toISOString(),
+    finishedAt: new Date().toISOString(),
+    rows: (result && result.rows) || 0,
+    updatedRows: (result && result.updatedRows) || 0,
+    source: (result && result.source) || 'PTTOR',
+    latestDate: (result && result.latestDate) || null,
+    fetchError: (result && result.fetchError) || ''
+  };
+  Logger.log('=== REFRESH OIL DATA NOW ===');
+  Logger.log(JSON.stringify(report));
+  SpreadsheetApp.getActiveSpreadsheet().toast(
+    'Oil refresh done: rows=' + report.rows + ', updated=' + report.updatedRows,
+    'Oil Refresh',
+    5
+  );
+  return report;
+}
+
+/**
+ * Public runner: refresh oil data and then verify fetched vs sheet value.
+ */
+function refreshOilAndTestPttorDiesel() {
+  var refresh = refreshOilDataNow();
+  var verify = testPttorDieselSource();
+  var report = {
+    ok: !!(refresh && refresh.ok) && !!(verify && verify.ok),
+    refresh: refresh,
+    verify: verify
+  };
+  Logger.log('=== REFRESH + TEST PTTOR DIESEL ===');
+  Logger.log(JSON.stringify(report));
+  return report;
+}
+
+function qaStep_(report, name, fn) {
+  var t0 = new Date().getTime();
+  try {
+    var details = fn();
+    report.checks.push({
+      name: name,
+      ok: true,
+      durationMs: new Date().getTime() - t0,
+      details: details || null
+    });
+  } catch (e) {
+    report.errors.push(name + ': ' + (e && e.message ? e.message : String(e)));
+    report.checks.push({
+      name: name,
+      ok: false,
+      durationMs: new Date().getTime() - t0,
+      details: null
+    });
+  }
+}
+
+function measureCallMs_(fn) {
+  var t0 = new Date().getTime();
+  fn();
+  return new Date().getTime() - t0;
 }
 
 // ============================================
@@ -2153,7 +3376,7 @@ function debugSourceData() {
           // Show parsed date from first sample row
           var firstDateStr = sample[0][0];
           var parsedDate = parseDate(firstDateStr);
-          Logger.log('[' + sheetName + '] Date parse test: "' + firstDateStr + '" -> ' + (parsedDate ? parsedDate.toISOString() : 'FAILED'));
+          Logger.log('[' + sheetName + '] Date parse test: "' + firstDateStr + '" -> ' + (parsedDate ? parsedDate : 'FAILED'));
         }
       }
     } catch (e) {
