@@ -1956,7 +1956,6 @@ function buildFullTrend(d) {
     <!-- Hero -->
     <div class="mvw-hero" style="--mvw-color:#3b82f6;--mvw-rgb:59,130,246;">
       <div>
-        <div class="mvw-hero-kicker">Section 01 · Performance Overview</div>
         <div class="mvw-hero-title">สรุปภาพรวมและดัชนีชี้วัดผลประกอบการหลัก</div>
         <div class="mvw-hero-desc">รายงานสรุปผลประกอบการรายเดือน วิเคราะห์แนวโน้มเที่ยววิ่ง รายได้ ส่วนต่างกำไร และอัตรากำไร พร้อมระบุเดือนที่ทำผลงานสูงสุดและต่ำสุดเพื่อการตัดสินใจเชิงกลยุทธ์</div>
       </div>
@@ -2223,7 +2222,6 @@ function buildFullRanking(d) {
     <!-- Hero -->
     <div class="mvw-hero" style="--mvw-color:#8b5cf6;--mvw-rgb:139,92,246;">
       <div>
-        <div class="mvw-hero-kicker">Section 02 · Route Ranking</div>
         <div class="mvw-hero-title">การจัดลำดับเส้นทางตามผลตอบแทนสุทธิ</div>
         <div class="mvw-hero-desc">แสดงเส้นทางที่ทำกำไรและขาดทุนสูงสุด พร้อมวิเคราะห์การกระจายตัวของผลตอบแทนทั่วทั้งเครือข่าย เพื่อระบุจุดแข็งและความเสี่ยงทางธุรกิจ</div>
       </div>
@@ -2385,7 +2383,6 @@ function buildFullCustomer(d) {
     <!-- Hero -->
     <div class="mvw-hero" style="--mvw-color:#22c55e;--mvw-rgb:34,197,94;">
       <div>
-        <div class="mvw-hero-kicker">Section 03 · Customer Profitability</div>
         <div class="mvw-hero-title">อัตราผลตอบแทนและส่วนต่างกำไรรายลูกค้า</div>
         <div class="mvw-hero-desc">ภาพรวมรายได้ ส่วนต่างกำไร และสัดส่วนของลูกค้าแต่ละราย ใช้สำหรับวิเคราะห์ portfolio ลูกค้า ระบุลูกค้าหลักและลูกค้าเสี่ยง</div>
       </div>
@@ -2524,7 +2521,6 @@ function buildFullOwnOut(d) {
     <!-- Hero -->
     <div class="mvw-hero" style="--mvw-color:#f59e0b;--mvw-rgb:245,158,11;">
       <div>
-        <div class="mvw-hero-kicker">Section 04 · Fleet Composition</div>
         <div class="mvw-hero-title">สัดส่วนการใช้รถบริษัทและรถรับจ้างภายนอก</div>
         <div class="mvw-hero-desc">เปรียบเทียบประสิทธิภาพและสัดส่วนระหว่างรถบริษัทและรถจ้างภายนอก เพื่อวิเคราะห์โครงสร้างต้นทุนและความคุ้มค่าในการบริหารกองรถ</div>
       </div>
@@ -2671,7 +2667,6 @@ function buildFullLoss(d) {
     <!-- Hero -->
     <div class="mvw-hero" style="--mvw-color:#ef4444;--mvw-rgb:239,68,68;">
       <div>
-        <div class="mvw-hero-kicker">Section 05 · Loss Trip Analysis</div>
         <div class="mvw-hero-title">ประสิทธิภาพของกลุ่มเที่ยววิ่งที่มีส่วนต่างขาดทุน</div>
         <div class="mvw-hero-desc">วิเคราะห์เที่ยววิ่งที่ขาดทุนตามมิติเวลา ลูกค้า และเส้นทาง เพื่อระบุจุดที่ต้องเร่งแก้ไข ลดความเสี่ยงทางการเงิน และวางแผนปรับปรุงเชิงรุก</div>
       </div>
@@ -2814,7 +2809,6 @@ function buildFullVehicle(d) {
     <!-- Hero -->
     <div class="mvw-hero" style="--mvw-color:#06b6d4;--mvw-rgb:6,182,212;">
       <div>
-        <div class="mvw-hero-kicker">Section 06 · Vehicle Performance</div>
         <div class="mvw-hero-title">ประสิทธิภาพประเภทรถ</div>
         <div class="mvw-hero-desc">วิเคราะห์ประสิทธิภาพแยกตามประเภทรถ ครอบคลุมจำนวนเที่ยว รายได้ ส่วนต่างกำไร และกำไรเปอร์เซ็นต์ เพื่อวางแผนการลงทุนกองรถและเลือกประเภทรถให้เหมาะสมกับเส้นทาง</div>
       </div>
