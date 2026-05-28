@@ -1977,7 +1977,8 @@ function calculateOwnVsOutsource(trips) {
       company.recv += (t.recv || 0);
       company.pay += (t.pay || 0);
       company.oil += (t.oil || 0);
-      if (!companyRoutes[t.route]) companyRoutes[t.route] = { route: t.route, trips: 0, margin: 0, recv: 0 };
+      if (!companyRoutes[t.route]) companyRoutes[t.route] = { route: t.route, routeDesc: t.routeDesc, trips: 0, margin: 0, recv: 0 };
+      else if (!companyRoutes[t.route].routeDesc && t.routeDesc) companyRoutes[t.route].routeDesc = t.routeDesc;
       companyRoutes[t.route].trips++;
       companyRoutes[t.route].margin += (t.margin || 0);
       companyRoutes[t.route].recv += (t.recv || 0);
@@ -1987,7 +1988,8 @@ function calculateOwnVsOutsource(trips) {
       outsource.recv += (t.recv || 0);
       outsource.pay += (t.pay || 0);
       outsource.oil += (t.oil || 0);
-      if (!outsourceRoutes[t.route]) outsourceRoutes[t.route] = { route: t.route, trips: 0, margin: 0, recv: 0 };
+      if (!outsourceRoutes[t.route]) outsourceRoutes[t.route] = { route: t.route, routeDesc: t.routeDesc, trips: 0, margin: 0, recv: 0 };
+      else if (!outsourceRoutes[t.route].routeDesc && t.routeDesc) outsourceRoutes[t.route].routeDesc = t.routeDesc;
       outsourceRoutes[t.route].trips++;
       outsourceRoutes[t.route].margin += (t.margin || 0);
       outsourceRoutes[t.route].recv += (t.recv || 0);
@@ -2051,7 +2053,8 @@ function calculateLossTrip(trips) {
     byMonth[month].count++;
     byMonth[month].loss += (t.margin || 0);
 
-    if (!byRoute[t.route]) byRoute[t.route] = { name: t.route, count: 0, loss: 0 };
+    if (!byRoute[t.route]) byRoute[t.route] = { name: t.route, route: t.route, routeDesc: t.routeDesc, count: 0, loss: 0 };
+    else if (!byRoute[t.route].routeDesc && t.routeDesc) byRoute[t.route].routeDesc = t.routeDesc;
     byRoute[t.route].count++;
     byRoute[t.route].loss += (t.margin || 0);
 
@@ -2548,18 +2551,20 @@ function getRoutesList() {
   var values = master.getRange(2, 1, master.getLastRow() - 1, master.getLastColumn()).getDisplayValues();
   var routes = {};
   for (var i = 0; i < values.length; i++) {
+    var routeDesc = String(values[i][3] || ''); // ชื่อเส้นทาง
     var route = String(values[i][4] || ''); // Route column (index 4 = เส้นทาง)
     var customer = mapCustomer(String(values[i][1] || ''));
     if (route) {
-      routes[route] = routes[route] || { route: route, customers: {} };
+      routes[route] = routes[route] || { route: route, routeDesc: routeDesc, customers: {} };
+      if (!routes[route].routeDesc && routeDesc) routes[route].routeDesc = routeDesc;
       routes[route].customers[customer] = true;
     }
   }
 
   var result = Object.values(routes).map(function(r) {
-    return { route: r.route, customers: Object.keys(r.customers) };
+    return { route: r.route, routeDesc: r.routeDesc, customers: Object.keys(r.customers) };
   });
-  result.sort(function(a, b) { return a.route.localeCompare(b.route); });
+  result.sort(function(a, b) { return String(a.routeDesc || a.route).localeCompare(String(b.routeDesc || b.route)); });
 
   return { routes: result };
 }

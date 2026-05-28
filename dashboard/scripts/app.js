@@ -279,6 +279,24 @@ function canonicalizeTripRow(row) {
   };
 }
 
+function cleanRouteDisplayText(value) {
+  const text = normalizeText(value, '').trim();
+  return text && text !== '-' ? text : '';
+}
+
+function routeDisplay(row) {
+  if (typeof row === 'string' || typeof row === 'number') {
+    return cleanRouteDisplayText(row) || '-';
+  }
+  return cleanRouteDisplayText(row?.routeDesc) ||
+    cleanRouteDisplayText(row?.desc) ||
+    cleanRouteDisplayText(row?.displayName) ||
+    cleanRouteDisplayText(row?.routeName) ||
+    cleanRouteDisplayText(row?.route) ||
+    cleanRouteDisplayText(row?.name) ||
+    '-';
+}
+
 function deriveCustomerProfitFromTrips(trips) {
   const groups = {};
   trips.forEach(rawTrip => {
@@ -378,7 +396,9 @@ function deriveOwnVsOutsourceFromTrips(trips) {
     target.pay += trip.pay;
     target.oil += trip.oil;
     if (!routeMap[trip.route]) {
-      routeMap[trip.route] = { route: trip.route, trips: 0, margin: 0, recv: 0 };
+      routeMap[trip.route] = { route: trip.route, routeDesc: trip.routeDesc, trips: 0, margin: 0, recv: 0 };
+    } else if (!cleanRouteDisplayText(routeMap[trip.route].routeDesc) && cleanRouteDisplayText(trip.routeDesc)) {
+      routeMap[trip.route].routeDesc = trip.routeDesc;
     }
     routeMap[trip.route].trips += 1;
     routeMap[trip.route].margin += trip.margin;
@@ -417,7 +437,11 @@ function deriveLossTripFromTrips(trips) {
       byMonth[month].count += 1;
       byMonth[month].loss += trip.margin;
     }
-    if (!byRoute[trip.route]) byRoute[trip.route] = { name: trip.route, count: 0, loss: 0 };
+    if (!byRoute[trip.route]) {
+      byRoute[trip.route] = { name: trip.route, route: trip.route, routeDesc: trip.routeDesc, count: 0, loss: 0 };
+    } else if (!cleanRouteDisplayText(byRoute[trip.route].routeDesc) && cleanRouteDisplayText(trip.routeDesc)) {
+      byRoute[trip.route].routeDesc = trip.routeDesc;
+    }
     byRoute[trip.route].count += 1;
     byRoute[trip.route].loss += trip.margin;
 
@@ -762,7 +786,11 @@ function buildLossAuditTableRowsFromTrips(trips) {
     byCustomer[customer].loss += Number(trip.margin) || 0;
 
     const route = normalizeText(trip.route, '-');
-    if (!byRoute[route]) byRoute[route] = { name: route, count: 0, loss: 0 };
+    if (!byRoute[route]) {
+      byRoute[route] = { name: route, route, routeDesc: trip.routeDesc, count: 0, loss: 0 };
+    } else if (!cleanRouteDisplayText(byRoute[route].routeDesc) && cleanRouteDisplayText(trip.routeDesc)) {
+      byRoute[route].routeDesc = trip.routeDesc;
+    }
     byRoute[route].count += 1;
     byRoute[route].loss += Number(trip.margin) || 0;
   });
@@ -793,6 +821,8 @@ function buildLossAuditTableRowsFromTrips(trips) {
   const routeRows = Object.values(byRoute)
     .map(row => ({
       name: row.name || '-',
+      route: row.route || row.name || '-',
+      routeDesc: row.routeDesc || '-',
       count: Number(row.count) || 0,
       loss: Number(row.loss) || 0,
       avgLoss: Number(row.count) > 0 ? Math.abs(Number(row.loss) || 0) / Number(row.count) : null
@@ -841,7 +871,7 @@ function buildLossAuditTableConfigs(rows, drillOptions = {}) {
       csvName: 'loss-by-route',
       rows: rows.routeRows,
       cols: [
-        { key: 'name', label: 'เส้นทาง', strong: true },
+        { key: 'name', label: 'ชื่อเส้นทาง', strong: true, value: row => routeDisplay(row), sortValue: row => routeDisplay(row), exportValue: row => routeDisplay(row) },
         { key: 'count', label: 'จำนวนเที่ยวขาดทุน', type: 'number', align: 'right', noFilter: true },
         { key: 'loss', label: 'มูลค่า', type: 'currency', align: 'right', strong: true, tone: 'sign', noFilter: true },
         { key: 'avgLoss', label: 'เฉลี่ย/เที่ยว', type: 'currency', align: 'right' }
@@ -1129,7 +1159,13 @@ function summarizeLossDrillRows(rows) {
 
 function buildLossDrillFilterMeta(rows) {
   const customerOptions = Array.from(new Set(rows.map(row => row.customer).filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), 'th'));
-  const routeOptions = Array.from(new Set(rows.map(row => row.route).filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), 'th'));
+  const routeOptionMap = {};
+  rows.forEach(row => {
+    const value = String(row.route || '').trim();
+    if (!value) return;
+    if (!routeOptionMap[value]) routeOptionMap[value] = { value, label: routeDisplay(row) };
+  });
+  const routeOptions = Object.values(routeOptionMap).sort((a, b) => String(a.label).localeCompare(String(b.label), 'th'));
   const filterYear = getPrimaryYearFromRows(rows);
   const monthCounts = {};
   rows.forEach(row => {
@@ -1186,7 +1222,7 @@ function renderLossDrillFilters(meta, filters, resultCount, totalCount, kind) {
   const customerOptionsHtml = ['<option value="">ลูกค้าทั้งหมด</option>']
     .concat(meta.customerOptions.map(name => `<option value="${esc(name)}"${filters.customer === name ? ' selected' : ''}>${esc(name)}</option>`)).join('');
   const routeOptionsHtml = ['<option value="">เส้นทางทั้งหมด</option>']
-    .concat(meta.routeOptions.map(name => `<option value="${esc(name)}"${filters.route === name ? ' selected' : ''}>${esc(name)}</option>`)).join('');
+    .concat(meta.routeOptions.map(opt => `<option value="${esc(opt.value)}"${filters.route === opt.value ? ' selected' : ''}>${esc(opt.label)}</option>`)).join('');
 
   return `
     <div class="loss-drill-filter-wrap">
@@ -1204,7 +1240,7 @@ function renderLossDrillFilters(meta, filters, resultCount, totalCount, kind) {
           <select id="lossDrillCustomer" class="loss-drill-filter-control">${customerOptionsHtml}</select>
         </label>` : ''}
         ${showRoute ? `<label class="loss-drill-filter-field">
-          <span>เส้นทาง</span>
+          <span>ชื่อเส้นทาง</span>
           <select id="lossDrillRoute" class="loss-drill-filter-control">${routeOptionsHtml}</select>
         </label>` : ''}
       </div>
@@ -1257,7 +1293,7 @@ function buildLossDrillPayload(kind, row, trips) {
   } else if (kind === 'route') {
     const routeKey = lossDrillNorm(row?.name || '-');
     matched = lossTrips.filter(t => lossDrillNorm(t.route || '-') === routeKey);
-    title = `ขาดทุนแยกตามเส้นทาง: ${row?.name || '-'}`;
+    title = `ขาดทุนแยกตามเส้นทาง: ${routeDisplay(row)}`;
     subtitle = 'รายการเที่ยวที่มีส่วนต่างขาดทุนของเส้นทางนี้';
   }
 
@@ -1278,6 +1314,7 @@ function buildLossDrillPayload(kind, row, trips) {
       date: t.date || '-',
       customer: t.customer || '-',
       route: t.route || '-',
+      routeDesc: t.routeDesc || '-',
       vtype: t.vtype || '-',
       driver: t.driver || '-',
       plate: t.plate || '-',
@@ -1365,7 +1402,7 @@ window.openLossDrillModal = async function (kind, row, opts = {}) {
           <td>${fmtB(r.idx)}</td>
           <td>${esc(r.date)}</td>
           <td>${esc(r.customer)}</td>
-          <td title="${esc(r.route)}">${esc(r.route)}</td>
+          <td title="${esc(routeDisplay(r))}">${esc(routeDisplay(r))}</td>
           <td>${esc(r.vtype)}</td>
           <td>${esc(r.driver)}</td>
           <td>${esc(r.plate)}</td>
@@ -1403,7 +1440,7 @@ window.openLossDrillModal = async function (kind, row, opts = {}) {
             <table class="audit-table loss-drill-table">
               <thead>
                 <tr>
-                  <th>ลำดับ</th><th>วันที่</th><th>ลูกค้า</th><th>เส้นทาง</th><th>ประเภทรถ</th><th>พขร.</th><th>ทะเบียน</th>
+                  <th>ลำดับ</th><th>วันที่</th><th>ลูกค้า</th><th>ชื่อเส้นทาง</th><th>ประเภทรถ</th><th>พขร.</th><th>ทะเบียน</th>
                   <th class="is-right">ราคารับ</th><th class="is-right">ราคาจ่าย</th><th class="is-right">สำรองน้ำมัน</th>
                   <th class="is-right">ส่วนต่าง</th><th class="is-right">กำไร %</th><th>สาเหตุที่พบ</th>
                 </tr>
@@ -1489,7 +1526,7 @@ window.openLossDrillModal = async function (kind, row, opts = {}) {
             <td>${fmtB(rowIndex + 1)}</td>
             <td>${esc(r.date)}</td>
             <td>${esc(r.customer)}</td>
-            <td title="${esc(r.route)}">${esc(r.route)}</td>
+            <td title="${esc(routeDisplay(r))}">${esc(routeDisplay(r))}</td>
             <td>${esc(r.vtype)}</td>
             <td>${esc(r.driver)}</td>
             <td>${esc(r.plate)}</td>
@@ -1528,7 +1565,7 @@ window.openLossDrillModal = async function (kind, row, opts = {}) {
               <table class="audit-table loss-drill-table">
                 <thead>
                   <tr>
-                    <th>ลำดับ</th><th>วันที่</th><th>ลูกค้า</th><th>เส้นทาง</th><th>ประเภทรถ</th><th>พขร.</th><th>ทะเบียน</th>
+                    <th>ลำดับ</th><th>วันที่</th><th>ลูกค้า</th><th>ชื่อเส้นทาง</th><th>ประเภทรถ</th><th>พขร.</th><th>ทะเบียน</th>
                     <th class="is-right">ราคารับ</th><th class="is-right">ราคาจ่าย</th><th class="is-right">สำรองน้ำมัน</th>
                     <th class="is-right">ส่วนต่าง</th><th class="is-right">กำไร %</th><th>สาเหตุที่พบ</th>
                   </tr>
@@ -1597,11 +1634,11 @@ function buildTrend(d) {
   </div>`;
   const rows = d.routeTrend.map(r => {
     const tot = months.reduce((a, m) => a + (r.months[m]?.trips || 0), 0);
-    return [r.customer, r.vtype || '-', r.route, tot,
+    return [r.customer, r.vtype || '-', routeDisplay(r), tot,
     ...months.flatMap(m => [r.months[m]?.trips || 0, r.months[m]?.margin || 0])
     ];
   });
-  const cols = ['ลูกค้า', 'ประเภทรถ', 'เส้นทาง (Route)', 'จำนวนเที่ยวรวม', ...months.flatMap(m => [MTH[m] + ' (เที่ยว)', MTH[m] + ' (ส่วนต่าง)'])];
+  const cols = ['ลูกค้า', 'ประเภทรถ', 'ชื่อเส้นทาง', 'จำนวนเที่ยวรวม', ...months.flatMap(m => [MTH[m] + ' (เที่ยว)', MTH[m] + ' (ส่วนต่าง)'])];
   h += `<div class="table-card" style="margin-bottom:0"><div class="table-card-header"><h3>สรุปผลการดำเนินงานรายเส้นทางและแนวโน้มส่วนต่างกำไรประจำเดือน</h3></div><div class="table-wrap" id="t_trend"></div></div>`;
   setTimeout(() => mkTable('t_trend', cols, rows, { defaultSort: 3, defaultAsc: false }), 0);
   return h;
@@ -1609,19 +1646,19 @@ function buildTrend(d) {
 
 function buildRanking(d) {
   const rk = d.routeRanking;
-  const mkRows = arr => arr.map(r => [r.customer, r.route, r.desc || '-', r.trips, r.margin, r.avgMargin, r.pct, r.loss]);
-  const cols = ['ลูกค้า', 'เส้นทาง (Route)', 'ชื่อเส้นทาง', 'จำนวนเที่ยว', 'ส่วนต่างรวม', 'ส่วนต่างเฉลี่ย/เที่ยว', 'กำไร %', 'เที่ยวขาดทุน'];
+  const mkRows = arr => arr.map(r => [r.customer, routeDisplay(r), r.trips, r.margin, r.avgMargin, r.pct, r.loss]);
+  const cols = ['ลูกค้า', 'ชื่อเส้นทาง', 'จำนวนเที่ยว', 'ส่วนต่างรวม', 'ส่วนต่างเฉลี่ย/เที่ยว', 'กำไร %', 'เที่ยวขาดทุน'];
   // Two highlight KPI cards
   let h = `<div class="master-grid-2" style="margin-bottom:20px;">
     <div class="master-mini-kpi" style="border-left:3px solid #22c55e;">
       <div class="master-mini-kpi-label">เส้นทางดีสุด</div>
       <div class="master-mini-kpi-value" style="color:#22c55e">${fmtB(rk.top[0]?.margin) + ' THB'}</div>
-      <div class="master-mini-kpi-sub">${rk.top[0]?.route || '-'}</div>
+      <div class="master-mini-kpi-sub">${routeDisplay(rk.top[0])}</div>
     </div>
     <div class="master-mini-kpi" style="border-left:3px solid #ef4444;">
       <div class="master-mini-kpi-label">เส้นทางขาดทุนสูงสุด</div>
       <div class="master-mini-kpi-value" style="color:#ef4444">${fmtB(rk.bottom[0]?.margin) + ' THB'}</div>
-      <div class="master-mini-kpi-sub">${rk.bottom[0]?.route || '-'}</div>
+      <div class="master-mini-kpi-sub">${routeDisplay(rk.bottom[0])}</div>
     </div>
   </div>`;
   h += `<div class="master-grid-2">
@@ -1710,8 +1747,8 @@ function buildOwnOut(d) {
     </div>
   </div>`;
 
-  const mkR = arr => arr.map(r => [r.route, r.trips, r.margin]);
-  const cols = ['เส้นทาง (Route)', 'จำนวนเที่ยว', 'ส่วนต่าง'];
+  const mkR = arr => arr.map(r => [routeDisplay(r), r.trips, r.margin]);
+  const cols = ['ชื่อเส้นทาง', 'จำนวนเที่ยว', 'ส่วนต่าง'];
   h += `<div class="master-grid-2">`;
   ['company', 'outsource'].forEach(k => {
     const label = k === 'company' ? 'รถบริษัท' : 'รถจ้างภายนอก';
@@ -1784,8 +1821,8 @@ function buildLoss(d) {
   const custRows = custArr.map(c => [c.name || '-', c.count || 0, c.loss || 0]);
 
   const routeArr = Array.isArray(lt.byRoute) ? lt.byRoute :
-    lt.byRoute ? Object.entries(lt.byRoute).map(([k, v]) => ({ name: k, count: v.count, loss: v.loss })) : [];
-  const routeRows = routeArr.map(r => [r.name || '-', r.count || 0, r.loss || 0]);
+    lt.byRoute ? Object.entries(lt.byRoute).map(([k, v]) => ({ name: k, route: v.route || k, routeDesc: v.routeDesc || v.desc, count: v.count, loss: v.loss })) : [];
+  const routeRows = routeArr.map(r => [routeDisplay(r), r.count || 0, r.loss || 0]);
 
   h += `<div class="master-grid-2">`;
   h += `<div class="table-card" style="margin-bottom:0"><div class="table-card-header"><h3>เที่ยวขาดทุนแยกตามรายลูกค้า</h3></div><div id="t_lc"></div></div>`;
@@ -1796,7 +1833,7 @@ function buildLoss(d) {
     if (document.getElementById('t_lc'))
       mkTable('t_lc', ['ลูกค้า', 'เที่ยวขาดทุน', 'มูลค่าขาดทุน (THB)'], custRows, { defaultSort: 2, defaultAsc: true });
     if (document.getElementById('t_lr'))
-      mkTable('t_lr', ['เส้นทาง (Route)', 'เที่ยวขาดทุน', 'มูลค่าขาดทุน (THB)'], routeRows, { defaultSort: 1, defaultAsc: false });
+      mkTable('t_lr', ['ชื่อเส้นทาง', 'เที่ยวขาดทุน', 'มูลค่าขาดทุน (THB)'], routeRows, { defaultSort: 1, defaultAsc: false });
   }, 0);
   return h;
 }
@@ -2138,7 +2175,7 @@ function buildFullTrend(d) {
         <div class="mvw-rt cols-trips">
           <div class="mvw-rt-head">
             <span class="num">ลำดับ</span>
-            <span>เส้นทาง</span>
+            <span>ชื่อเส้นทาง</span>
             <span>ลูกค้า</span>
             <span class="right">สัดส่วนเที่ยว</span>
             <span class="right">ส่วนต่างรวม</span>
@@ -2159,7 +2196,7 @@ function buildFullTrend(d) {
         return `<div class="mvw-rt-row ${tier}" style="--mvw-rt-color:${col};">
                 <div class="mvw-rt-medal">${String(i + 1).padStart(2, '0')}</div>
                 <div class="mvw-rt-info">
-                  <span class="mvw-rt-name" title="${esc(r.route)}">${esc(r.route)}</span>
+                  <span class="mvw-rt-name" title="${esc(routeDisplay(r))}">${esc(routeDisplay(r))}</span>
                   <div class="mvw-rt-meta">
                     <span>${esc(r.vtype || '-')}</span>
                     <span class="mvw-rt-meta-sep"></span>
@@ -2241,12 +2278,12 @@ function buildFullRanking(d) {
       <div class="mvw-kpi" style="--mvw-kpi-color:#22c55e;">
         <span class="mvw-kpi-label">กำไรสูงสุด</span>
         <span class="mvw-kpi-value">${fmt(rk.top[0]?.margin || 0)}</span>
-        <span class="mvw-kpi-sub" title="${esc(rk.top[0]?.route || '-')}">THB · ${esc(rk.top[0]?.route || '-')}</span>
+        <span class="mvw-kpi-sub" title="${esc(routeDisplay(rk.top[0]))}">THB · ${esc(routeDisplay(rk.top[0]))}</span>
       </div>
       <div class="mvw-kpi" style="--mvw-kpi-color:#ef4444;">
         <span class="mvw-kpi-label">ขาดทุนสูงสุด</span>
         <span class="mvw-kpi-value">${fmt(rk.bottom[0]?.margin || 0)}</span>
-        <span class="mvw-kpi-sub" title="${esc(rk.bottom[0]?.route || '-')}">THB · ${esc(rk.bottom[0]?.route || '-')}</span>
+        <span class="mvw-kpi-sub" title="${esc(routeDisplay(rk.bottom[0]))}">THB · ${esc(routeDisplay(rk.bottom[0]))}</span>
       </div>
       <div class="mvw-kpi" style="--mvw-kpi-color:${netColor};">
         <span class="mvw-kpi-label">ส่วนต่างสุทธิ</span>
@@ -2304,7 +2341,7 @@ function buildFullRanking(d) {
           <div class="mvw-rt cols-rank">
             <div class="mvw-rt-head">
               <span class="num">ลำดับ</span>
-              <span>เส้นทาง · ลูกค้า</span>
+              <span>ชื่อเส้นทาง · ลูกค้า</span>
               <span class="right">ส่วนต่าง / เที่ยว</span>
             </div>
             ${top5Detail.map((r, i) => {
@@ -2312,7 +2349,7 @@ function buildFullRanking(d) {
     return `<div class="mvw-rt-row ${tier}" style="--mvw-rt-color:#22c55e;">
                 <div class="mvw-rt-medal">${String(i + 1).padStart(2, '0')}</div>
                 <div class="mvw-rt-info">
-                  <span class="mvw-rt-name" title="${esc(r.route || '-')}">${esc(r.route || '-')}</span>
+                  <span class="mvw-rt-name" title="${esc(routeDisplay(r))}">${esc(routeDisplay(r))}</span>
                   <div class="mvw-rt-meta">
                     <span>${esc(r.customer || '-')}</span>
                     <span class="mvw-rt-meta-sep"></span>
@@ -2337,7 +2374,7 @@ function buildFullRanking(d) {
           <div class="mvw-rt cols-rank">
             <div class="mvw-rt-head">
               <span class="num">ลำดับ</span>
-              <span>เส้นทาง · ลูกค้า</span>
+              <span>ชื่อเส้นทาง · ลูกค้า</span>
               <span class="right">ส่วนต่าง / เที่ยว</span>
             </div>
             ${bot5Detail.map((r, i) => {
@@ -2345,7 +2382,7 @@ function buildFullRanking(d) {
     return `<div class="mvw-rt-row ${tier}" style="--mvw-rt-color:#ef4444;">
                 <div class="mvw-rt-medal">${String(i + 1).padStart(2, '0')}</div>
                 <div class="mvw-rt-info">
-                  <span class="mvw-rt-name" title="${esc(r.route || '-')}">${esc(r.route || '-')}</span>
+                  <span class="mvw-rt-name" title="${esc(routeDisplay(r))}">${esc(routeDisplay(r))}</span>
                   <div class="mvw-rt-meta">
                     <span>${esc(r.customer || '-')}</span>
                     <span class="mvw-rt-meta-sep"></span>
@@ -2963,12 +3000,13 @@ function buildTrendCard(d) {
     const tot = months.reduce((a, m) => a + (r.months[m]?.trips || 0), 0);
     const w = (tot / maxTrips * 100).toFixed(1);
     const col = COLORS[i % 10];
-    const routeShort = r.route.length > 22 ? r.route.slice(0, 22) + '…' : r.route;
+    const displayRoute = routeDisplay(r);
+    const routeShort = displayRoute.length > 22 ? displayRoute.slice(0, 22) + '…' : displayRoute;
     return `<div class="mcr-rank-row" style="--mcr-rank-color:${col};">
         <div class="mcr-rank-num">${String(i + 1).padStart(2, '0')}</div>
         <div class="mcr-rank-body">
           <div class="mcr-rank-top">
-            <span class="mcr-rank-name" title="${esc(r.customer)} — ${esc(r.route)}">${esc(r.customer)} · ${esc(routeShort)}</span>
+            <span class="mcr-rank-name" title="${esc(r.customer)} — ${esc(displayRoute)}">${esc(r.customer)} · ${esc(routeShort)}</span>
             <span class="mcr-rank-value">${fmtB(tot)} <span class="mcr-rank-meta">เที่ยว</span></span>
           </div>
           <div class="mcr-rank-bar"><div class="mcr-rank-fill" style="width:${w}%;"></div></div>
@@ -2984,8 +3022,8 @@ function buildRankingCard(d) {
   const bot3 = rk.bottom.slice(0, 3);
   const maxTop = Math.max(...top3.map(r => Math.abs(r.margin)), 1);
   const maxBot = Math.max(...bot3.map(r => Math.abs(r.margin)), 1);
-  const topRoute = rk.top[0]?.route || '-';
-  const botRoute = rk.bottom[0]?.route || '-';
+  const topRoute = routeDisplay(rk.top[0]);
+  const botRoute = routeDisplay(rk.bottom[0]);
   const topRouteShort = topRoute.length > 26 ? topRoute.slice(0, 26) + '…' : topRoute;
   const botRouteShort = botRoute.length > 26 ? botRoute.slice(0, 26) + '…' : botRoute;
   return `
@@ -3009,12 +3047,13 @@ function buildRankingCard(d) {
         </div>
         ${top3.map((r, i) => {
     const w = (Math.abs(r.margin) / maxTop * 100).toFixed(1);
-    const routeShort = r.route.length > 18 ? r.route.slice(0, 18) + '…' : r.route;
+    const displayRoute = routeDisplay(r);
+    const routeShort = displayRoute.length > 18 ? displayRoute.slice(0, 18) + '…' : displayRoute;
     return `<div class="mcr-rank-row" style="--mcr-rank-color:#22c55e;">
             <div class="mcr-rank-num">${String(i + 1).padStart(2, '0')}</div>
             <div class="mcr-rank-body">
               <div class="mcr-rank-top">
-                <span class="mcr-rank-name" title="${esc(r.route)}">${esc(routeShort)}</span>
+                <span class="mcr-rank-name" title="${esc(displayRoute)}">${esc(routeShort)}</span>
                 <span class="mcr-rank-value" style="color:#4ade80;">${fmt(r.margin)}</span>
               </div>
               <div class="mcr-rank-bar"><div class="mcr-rank-fill" style="width:${w}%;background:linear-gradient(90deg,rgba(34,197,94,.5),#22c55e);"></div></div>
@@ -3029,12 +3068,13 @@ function buildRankingCard(d) {
         </div>
         ${bot3.map((r, i) => {
     const w = (Math.abs(r.margin) / maxBot * 100).toFixed(1);
-    const routeShort = r.route.length > 18 ? r.route.slice(0, 18) + '…' : r.route;
+    const displayRoute = routeDisplay(r);
+    const routeShort = displayRoute.length > 18 ? displayRoute.slice(0, 18) + '…' : displayRoute;
     return `<div class="mcr-rank-row" style="--mcr-rank-color:#ef4444;">
             <div class="mcr-rank-num">${String(i + 1).padStart(2, '0')}</div>
             <div class="mcr-rank-body">
               <div class="mcr-rank-top">
-                <span class="mcr-rank-name" title="${esc(r.route)}">${esc(routeShort)}</span>
+                <span class="mcr-rank-name" title="${esc(displayRoute)}">${esc(routeShort)}</span>
                 <span class="mcr-rank-value" style="color:#f87171;">${fmt(r.margin)}</span>
               </div>
               <div class="mcr-rank-bar"><div class="mcr-rank-fill" style="width:${w}%;background:linear-gradient(90deg,rgba(239,68,68,.5),#ef4444);"></div></div>
@@ -3262,7 +3302,7 @@ function getMasterModalTableConfigs(key, d, opts = {}) {
       const row = {
         customer: r.customer || '-',
         vtype: r.vtype || '-',
-        route: r.route || '-',
+        route: routeDisplay(r),
         totalTrips,
         totalMargin
       };
@@ -3272,7 +3312,7 @@ function getMasterModalTableConfigs(key, d, opts = {}) {
     const routeCols = [
       { key: 'customer', label: 'ลูกค้า' },
       { key: 'vtype', label: 'ประเภทรถ' },
-      { key: 'route', label: 'เส้นทาง' },
+      { key: 'route', label: 'ชื่อเส้นทาง' },
       { key: 'totalTrips', label: 'เที่ยวรวม', type: 'number', align: 'right', strong: true },
       ...monthsToShow.map(month => ({ key: `m_${month}`, label: `${MTH[month] || month} (เที่ยว)`, type: 'number', align: 'right' })),
       { key: 'totalMargin', label: 'ส่วนต่างรวม', type: 'currency', align: 'right', strong: true, tone: 'sign' }
@@ -3339,7 +3379,7 @@ function getMasterModalTableConfigs(key, d, opts = {}) {
       rank,
       group,
       customer: row.customer || '-',
-      route: row.route || '-',
+      route: routeDisplay(row),
       trips: Number(row.trips) || 0,
       margin: Number(row.margin) || 0,
       avgMargin: Number(row.avgMargin) || 0,
@@ -3353,7 +3393,7 @@ function getMasterModalTableConfigs(key, d, opts = {}) {
         cols: [
           { key: 'rank', label: 'อันดับ', type: 'integer', align: 'right', strong: true, noFilter: true },
           { key: 'customer', label: 'ลูกค้า' },
-          { key: 'route', label: 'เส้นทาง' },
+          { key: 'route', label: 'ชื่อเส้นทาง' },
           { key: 'trips', label: 'เที่ยว', type: 'number', align: 'right' },
           { key: 'margin', label: 'ส่วนต่างรวม', type: 'currency', align: 'right', strong: true, tone: 'sign' },
           { key: 'avgMargin', label: 'ส่วนต่าง/เที่ยว', type: 'currency', align: 'right', tone: 'sign' },
@@ -3371,7 +3411,7 @@ function getMasterModalTableConfigs(key, d, opts = {}) {
         cols: [
           { key: 'rank', label: 'อันดับ', type: 'integer', align: 'right', strong: true, noFilter: true },
           { key: 'customer', label: 'ลูกค้า' },
-          { key: 'route', label: 'เส้นทาง' },
+          { key: 'route', label: 'ชื่อเส้นทาง' },
           { key: 'trips', label: 'เที่ยว', type: 'number', align: 'right' },
           { key: 'margin', label: 'ส่วนต่างรวม', type: 'currency', align: 'right', strong: true, tone: 'sign' },
           { key: 'avgMargin', label: 'ส่วนต่าง/เที่ยว', type: 'currency', align: 'right', tone: 'sign' },
@@ -3419,13 +3459,13 @@ function getMasterModalTableConfigs(key, d, opts = {}) {
     const { company, outsource } = getSafeOwnOut(d);
     const mapRows = (rows, ownership) => rows.map(row => ({
       ownership,
-      route: row.route || '-',
+      route: routeDisplay(row),
       trips: Number(row.trips) || 0,
       margin: Number(row.margin) || 0,
       status: Number(row.margin) > 0 ? 'กำไร' : Number(row.margin) < 0 ? 'ขาดทุน' : 'คงที่'
     }));
     const cols = [
-      { key: 'route', label: 'เส้นทาง' },
+      { key: 'route', label: 'ชื่อเส้นทาง' },
       { key: 'trips', label: 'เที่ยว', type: 'number', align: 'right', noFilter: true },
       { key: 'margin', label: 'ส่วนต่าง', type: 'currency', align: 'right', strong: true, tone: 'sign', noFilter: true },
       { key: 'status', label: 'สถานะ' }
@@ -3484,9 +3524,12 @@ function getMasterModalTableConfigs(key, d, opts = {}) {
         loss: Number(row.loss) || 0,
         avgLoss: Number(row.count) > 0 ? Math.abs(Number(row.loss) || 0) / Number(row.count) : null
       }));
-    const routeRows = (Array.isArray(lt.byRoute) ? lt.byRoute : Object.entries(lt.byRoute || {}).map(([name, info]) => ({ name, count: info.count, loss: info.loss })))
+    const routeRows = (Array.isArray(lt.byRoute) ? lt.byRoute : Object.entries(lt.byRoute || {}).map(([name, info]) => ({ name, route: info.route || name, routeDesc: info.routeDesc || info.desc, count: info.count, loss: info.loss })))
       .map(row => ({
         name: row.name || '-',
+        route: row.route || row.name || '-',
+        routeDesc: row.routeDesc || '-',
+        displayName: routeDisplay(row),
         count: Number(row.count) || 0,
         loss: Number(row.loss) || 0,
         avgLoss: Number(row.count) > 0 ? Math.abs(Number(row.loss) || 0) / Number(row.count) : null
@@ -3744,6 +3787,7 @@ function buildDailyCompare(data) {
     rows.forEach(r => {
       const k = `${r.customer || '-'}|${r.route || '-'}|${r.vtype || '-'}`;
       if (!routeMap[k]) routeMap[k] = { customer: r.customer || '-', route: r.route || '-', routeDesc: r.routeDesc || '-', vtype: r.vtype || '-', recv: 0, pay: 0, oil: 0, margin: 0, trips: 0 };
+      else if (!cleanRouteDisplayText(routeMap[k].routeDesc) && cleanRouteDisplayText(r.routeDesc)) routeMap[k].routeDesc = r.routeDesc;
       routeMap[k].recv += r.recv || 0; routeMap[k].pay += r.pay || 0; routeMap[k].oil += r.oil || 0; routeMap[k].margin += r.margin || 0; routeMap[k].trips++;
     });
     const routes = Object.values(routeMap)
@@ -4033,7 +4077,7 @@ function buildDailyCompare(data) {
         </div>
 
         <div style="position:relative;z-index:50">
-          <div style="font-size:10px;font-weight:450;color:#94a3b8;margin-bottom:6px;letter-spacing:0.5px">เส้นทาง</div>
+          <div style="font-size:10px;font-weight:450;color:#94a3b8;margin-bottom:6px;letter-spacing:0.5px">ชื่อเส้นทาง</div>
           <div id="ms_btn_route" class="dc-ms-btn" onclick="dcToggleMs('route',event)">
             <span id="ms_lbl_route" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px">ทั้งหมด</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><polyline points="6 9 12 15 18 9"></polyline></svg>
@@ -4283,8 +4327,8 @@ function buildDailyCompare(data) {
       const lbl = document.getElementById('ms_lbl_' + id);
       if (lbl) {
         if (vals.length === 0 || vals.length === total) lbl.textContent = 'ทั้งหมด';
-        else if (vals.length === 1) lbl.textContent = vals[0];
-        else lbl.textContent = `เลือก ${vals.length} รายการ`;
+      else if (vals.length === 1) lbl.textContent = checked[0]?.closest('label')?.querySelector('span')?.textContent || vals[0];
+      else lbl.textContent = `เลือก ${vals.length} รายการ`;
       }
       dcUpdateFilters(false);
     };
@@ -4307,12 +4351,22 @@ function buildDailyCompare(data) {
     function buildMsOptions(id, options, currentVals = []) {
       const pnl = document.getElementById('ms_pnl_' + id);
       if (!pnl) return;
-      if (options.length === 0) {
+      const optionItems = (options || []).map(option => {
+        if (option && typeof option === 'object') {
+          const value = String(option.value ?? option.route ?? '');
+          const label = String(option.label ?? option.routeDesc ?? option.desc ?? value);
+          return { value, label, search: String(option.search ?? `${label} ${value}`) };
+        }
+        const value = String(option ?? '');
+        return { value, label: value, search: value };
+      }).filter(option => option.value);
+      if (optionItems.length === 0) {
         pnl.innerHTML = '<div style="padding:10px 12px;color:var(--muted);font-size:12px;text-align:center">ไม่มีข้อมูล</div>';
         return;
       }
-      const validVals = currentVals.filter(v => options.includes(v));
-      const allChecked = validVals.length === 0 || validVals.length === options.length;
+      const optionValues = optionItems.map(option => option.value);
+      const validVals = currentVals.filter(v => optionValues.includes(v));
+      const allChecked = validVals.length === 0 || validVals.length === optionItems.length;
 
       pnl.innerHTML = `
         <div style="position:sticky;top:0;background:#1e222d;z-index:10;border-bottom:1px solid rgba(255,255,255,.05);padding-bottom:8px;margin-bottom:4px;padding-top:6px;">
@@ -4325,10 +4379,10 @@ function buildDailyCompare(data) {
           </label>
         </div>
         <div id="ms_items_${id}">
-      ` + options.map(o => `
-        <label class="dc-ms-item" data-ms-val="${esc(o).toLowerCase()}" style="display:flex;">
-          <input type="checkbox" value="${esc(o)}" onchange="dcMsChange('${id}')" ${validVals.includes(o) ? 'checked' : ''}>
-          <span>${esc(o)}</span>
+      ` + optionItems.map(option => `
+        <label class="dc-ms-item" data-ms-val="${esc(option.search).toLowerCase()}" style="display:flex;">
+          <input type="checkbox" value="${esc(option.value)}" onchange="dcMsChange('${id}')" ${validVals.includes(option.value) ? 'checked' : ''}>
+          <span>${esc(option.label)}</span>
         </label>
       `).join('') + `</div>`;
     }
@@ -4356,7 +4410,12 @@ function buildDailyCompare(data) {
       const vtypePanelOpen = document.getElementById('ms_pnl_vtype')?.classList.contains('show');
 
       if (!routePanelOpen) {
-        const routeOptions = [...new Set(allRows.map(r => r.route || '-'))].sort();
+        const routeOptionMap = {};
+        allRows.forEach(r => {
+          const value = r.route || '-';
+          if (!routeOptionMap[value]) routeOptionMap[value] = { value, label: routeDisplay(r), search: `${routeDisplay(r)} ${value}` };
+        });
+        const routeOptions = Object.values(routeOptionMap).sort((a, b) => String(a.label).localeCompare(String(b.label), 'th'));
         buildMsOptions('route', routeOptions, routeF);
       }
 
@@ -4938,6 +4997,12 @@ function buildDailyCompare(data) {
       }
 
       const { custF, routeF, vtypeF } = getFilters();
+      const routeLabelMap = {};
+      validFd.forEach(row => {
+        const value = row.route || '-';
+        if (!routeLabelMap[value]) routeLabelMap[value] = routeDisplay(row);
+      });
+      const routeFilterLabels = routeF.map(route => routeLabelMap[route] || route);
       function fmtNum(n) { return (n == null || isNaN(n)) ? 0 : Math.round(Number(n) * 100) / 100; }
 
       function addCommas(str) {
@@ -4972,7 +5037,7 @@ function buildDailyCompare(data) {
       }
       function filterSummaryText() {
         return 'ลูกค้า: ' + (custF.length ? custF.join(', ') : 'ทั้งหมด') +
-          ' | เส้นทาง: ' + (routeF.length ? routeF.join(', ') : 'ทั้งหมด') +
+          ' | ชื่อเส้นทาง: ' + (routeFilterLabels.length ? routeFilterLabels.join(', ') : 'ทั้งหมด') +
           ' | ประเภทรถ: ' + (vtypeF.length ? vtypeF.join(', ') : 'ทั้งหมด') +
           ' | โหมด: ' + (_isSingleMode ? 'มุมมองปกติ' : 'เปรียบเทียบ');
       }
@@ -5202,7 +5267,7 @@ function buildDailyCompare(data) {
         wsData.push([cCell(filterSummaryText(), { color: '6B7280', sz: 9 })]);
         wsData.push([cCell('ช่วงข้อมูล: ' + (periodLabel || '-'), { color: '374151', sz: 9 })]);
         wsData.push([]);
-        const headers = ['ลูกค้า', 'เส้นทาง', 'วันที่', 'พขร.', 'ประเภทรถ', 'ทะเบียน', 'ราคาน้ำมัน', 'สำรองน้ำมัน', 'ราคารับ', 'ราคาจ่าย', 'ส่วนต่าง', 'ความผิดปกติ'];
+        const headers = ['ลูกค้า', 'ชื่อเส้นทาง', 'วันที่', 'พขร.', 'ประเภทรถ', 'ทะเบียน', 'ราคาน้ำมัน', 'สำรองน้ำมัน', 'ราคารับ', 'ราคาจ่าย', 'ส่วนต่าง', 'ความผิดปกติ'];
         wsData.push(headers.map(t => hCell(t)));
         let rowIdx = wsData.length;
 
@@ -5235,7 +5300,7 @@ function buildDailyCompare(data) {
           if (pa !== pb) return pa - pb;
           if (b.severity !== a.severity) return b.severity - a.severity;
           if (b.anomCount !== a.anomCount) return b.anomCount - a.anomCount;
-          return String(a.route.route || '').localeCompare(String(b.route.route || ''), 'th');
+          return routeDisplay(a.route).localeCompare(routeDisplay(b.route), 'th');
         });
 
         const grouped = {};
@@ -5272,7 +5337,7 @@ function buildDailyCompare(data) {
             const routeFill = item.anomCount > 0 ? 'FEF2F2' : 'ECFDF5';
             const routeRow = [
               cCell(route.customer || '-', { fill: routeFill, bold: true }),
-              cCell(route.route || '-', { fill: routeFill, bold: true }),
+              cCell(routeDisplay(route), { fill: routeFill, bold: true }),
               cCell('รวม ' + (item.rows || []).length + ' เที่ยว', { fill: routeFill }),
               cCell('', { fill: routeFill }),
               cCell(route.vtype || '-', { fill: routeFill, bold: true }),
@@ -5294,7 +5359,7 @@ function buildDailyCompare(data) {
               const zf = (rowIdx % 2 === 0) ? 'F9FAFB' : null;
               wsData.push([
                 cCell(r.customer || '-', { fill: zf }),
-                cCell(r.route || '-', { fill: zf }),
+                cCell(routeDisplay(r), { fill: zf }),
                 cCell(r.date || '-', { fill: zf }),
                 cCell(r.driver || '-', { fill: zf }),
                 cCell(r.vtype || '-', { fill: zf }),
@@ -5349,7 +5414,7 @@ function buildDailyCompare(data) {
         wsData.push([cCell('ช่วงข้อมูลหลัก: ' + myPeriodLabel + ' | ช่วงข้อมูลเปรียบเทียบ: ' + otherPeriodLabel + ' | (เที่ยวที่ไม่มีคู่เปรียบเทียบในอีกช่วง)', { color: '374151', sz: 9 })]);
         wsData.push([]);
         const headers = [
-          'ลูกค้า', 'เส้นทาง', 'วันที่', 'พขร.', 'ประเภทรถ', 'ทะเบียน',
+          'ลูกค้า', 'ชื่อเส้นทาง', 'วันที่', 'พขร.', 'ประเภทรถ', 'ทะเบียน',
           'ราคาน้ำมัน', 'สำรองน้ำมัน', 'ราคารับ', 'ราคาจ่าย', 'ส่วนต่าง', 'ความผิดปกติ', 'หมายเหตุ'
         ];
         const headerRow = wsData.length;
@@ -5365,7 +5430,7 @@ function buildDailyCompare(data) {
             : 'รวม ' + (card.rows || []).length + ' เที่ยว';
           const top = [
             cCell(card.ga.customer || '-', { bold: true, fill: 'DBEAFE' }),
-            cCell(card.ga.route || '-', { bold: true, fill: 'DBEAFE' }),
+            cCell(routeDisplay(card.ga), { bold: true, fill: 'DBEAFE' }),
             cCell('ประเภทรถ: ' + (card.ga.vtype || '-'), { bold: true, fill: 'DBEAFE', wrap: false }),
             cCell('', { fill: 'DBEAFE' }),   // D — merged with C
             cCell(summaryText, { bold: true, fill: 'DBEAFE' }),
@@ -5384,7 +5449,7 @@ function buildDailyCompare(data) {
             const zf = (rowIdx % 2 === 0) ? 'F9FAFB' : null;
             const row = [
               cCell(r.customer || '-', { fill: zf }),
-              cCell(r.route || '-', { fill: zf }),
+              cCell(routeDisplay(r), { fill: zf }),
               cCell(r.date || '-', { fill: zf }),
               cCell(r.driver || '-', { fill: zf }),
               cCell(r.vtype || '-', { fill: zf }),
@@ -5567,7 +5632,7 @@ function buildDailyCompare(data) {
         ws4Data.push([cCell('ช่วงข้อมูลหลัก: ' + periodALabel + ' | ช่วงข้อมูลเปรียบเทียบ: ' + periodBLabel + ' | Δ = ' + periodALabel + ' - ' + periodBLabel, { color: '374151', sz: 9 })]);
         ws4Data.push([]);
         const h4 = [
-          'ลูกค้า', 'เส้นทาง', 'วันที่หลัก', 'วันที่เปรียบเทียบ', 'พขร.',
+          'ลูกค้า', 'ชื่อเส้นทาง', 'วันที่หลัก', 'วันที่เปรียบเทียบ', 'พขร.',
           'ประเภทรถ', 'ทะเบียน', 'ราคาน้ำมัน', 'สำรองน้ำมัน',
           'ราคารับ', 'ราคาจ่าย', 'ส่วนต่าง', 'ความผิดปกติ', 'หมายเหตุ'
         ];
@@ -5586,7 +5651,7 @@ function buildDailyCompare(data) {
             : 'รวม ' + (card.rows || []).length + ' คู่เปรียบเทียบ';
           const top = [
             cCell(card.ga.customer || '-', { bold: true, fill: 'DBEAFE' }),
-            cCell(card.ga.route || '-', { bold: true, fill: 'DBEAFE' }),
+            cCell(routeDisplay(card.ga), { bold: true, fill: 'DBEAFE' }),
             cCell('ประเภทรถ: ' + (card.ga.vtype || '-'), { bold: true, fill: 'DBEAFE' }),
             cCell('', { fill: 'DBEAFE' }),                                    // D — merged with C
             cCell(summaryText, { bold: true, fill: 'DBEAFE' }),
@@ -5611,7 +5676,7 @@ function buildDailyCompare(data) {
             const bOptsNeutral = f => ({ fill: f, align: 'right', wrap: true, valign: 'top', neutralColor: true });
             const row = [
               cCell(ra.customer || rb.customer || '-', { fill: zf }),
-              cCell(ra.route || rb.route || '-', { fill: zf }),
+              cCell(routeDisplay(ra.route || ra.routeDesc ? ra : rb), { fill: zf }),
               cCell(ra.date || '-', { fill: zf }),
               cCell(rb.date || '-', { fill: zf }),
               cCell(ra.driver || rb.driver || '-', { fill: zf }),
@@ -5938,43 +6003,6 @@ function buildDailyCompare(data) {
       </header>`;
     }
 
-    window.dcOpenRouteModal = function (dateStart, dateEnd, routeStr, specificCust, specificVtype, routeDescStr) {
-      const rows = validFd.filter(r =>
-        r.date >= dateStart && r.date <= dateEnd && r.route === routeStr &&
-        (!specificCust || r.customer === specificCust) &&
-        (!specificVtype || r.vtype === specificVtype)
-      ).sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
-      if (!rows.length) return;
-      const modalRows = rows.map(ra => ({ ra, statuses: dcQaTripStatuses(ra, rows) }))
-        .sort((a, b) => {
-          const rankA = dcQaStatusRank(a.statuses);
-          const rankB = dcQaStatusRank(b.statuses);
-          if (rankB !== rankA) return rankB - rankA;
-          return String(a.ra.date || '').localeCompare(String(b.ra.date || ''));
-        });
-      const body = `<div class="dc-qa-table-wrap is-modal"><table class="dc-qa-table"><thead><tr><th>วันที่</th><th>พขร.</th><th>ประเภทรถ</th><th>ทะเบียน</th><th class="is-right">ราคาน้ำมัน</th><th class="is-right">สำรองน้ำมัน</th><th class="is-right">ราคารับ</th><th class="is-right">ราคาจ่าย</th><th class="is-right">ส่วนต่าง</th><th>ความผิดปกติ</th></tr></thead><tbody>${modalRows.map(row => dcQaSingleTripRow(row.ra, row.statuses, true)).join('')}</tbody></table></div>`;
-      const modalTitle = (routeDescStr && routeDescStr !== '-') ? `${esc(routeStr)} (${esc(routeDescStr)})` : esc(routeStr || '-');
-      dcQaModalShell('dc_route_modal', 'dc_route_capture', modalTitle, `${esc(specificCust || '-')} · ${esc(specificVtype || '-')} · ${esc(fmtRange(dateStart, dateEnd))}`, encodeURIComponent(`route_${routeStr || 'route'}`), body);
-    };
-
-    window.dcOpenAnomalyModal = function (idx) {
-      const card = window._anomalyCardsData?.[idx];
-      if (!card) return;
-      const rTitle = (card.ga.routeDesc && card.ga.routeDesc !== '-') ? `${card.ga.route} (${card.ga.routeDesc})` : (card.ga.route || '-');
-      const body = `<div class="dc-qa-table-wrap is-modal"><table class="dc-qa-table dc-qa-pair-table"><thead><tr><th>วันที่หลัก</th><th>วันที่เปรียบเทียบ</th><th>พขร.</th><th>ประเภทรถ</th><th>ทะเบียน</th><th>ราคาน้ำมัน</th><th>สำรองน้ำมัน</th><th>ราคารับ</th><th>ราคาจ่าย</th><th class="dc-qa-th-diff">ส่วนต่าง</th><th class="dc-qa-th-flag">ความผิดปกติ</th></tr></thead><tbody>${card.anomRows.map(row => dcQaPairRow(row, true)).join('')}</tbody></table></div>`;
-      dcQaModalShell('dc_anom_modal', 'dc_anom_capture', `รายละเอียดการเปรียบเทียบ: ${esc(rTitle)}`, `${esc(card.ga.customer || '-')} · ${esc(card.ga.vtype || '-')} · ${esc(_labelA)} / ${esc(_labelB)}`, encodeURIComponent(`anomaly_${card.ga.route || 'route'}`), body);
-    };
-
-    window.dcOpenUnmatchedModal = function (idx, side) {
-      const card = window._unmatchedCardsData?.[idx];
-      if (!card) return;
-      const isA = side === 'a';
-      const myLabel = isA ? _labelA : _labelB;
-      const rTitle = (card.ga.routeDesc && card.ga.routeDesc !== '-') ? `${card.ga.route} (${card.ga.routeDesc})` : (card.ga.route || '-');
-      const body = `<div class="dc-qa-table-wrap is-modal"><table class="dc-qa-table"><thead><tr><th>วันที่</th><th>พขร.</th><th>ประเภทรถ</th><th>ทะเบียน</th><th class="is-right">ราคาน้ำมัน</th><th class="is-right">สำรองน้ำมัน</th><th class="is-right">ราคารับ</th><th class="is-right">ราคาจ่าย</th><th class="is-right">ส่วนต่าง</th><th>ความผิดปกติ</th></tr></thead><tbody>${card.unRows.map(row => dcQaSingleTripRow(row.ra, row.statuses, true)).join('')}</tbody></table></div>`;
-      dcQaModalShell('dc_unm_modal', 'dc_unm_capture', `รายละเอียดเที่ยวที่ไม่มีคู่: ${esc(rTitle)}`, `${esc(card.ga.customer || '-')} · ${esc(card.ga.vtype || '-')} · ${esc(myLabel)}`, encodeURIComponent(`unmatched_${card.ga.route || 'route'}`), body);
-    };
-
     function dcQaSingleTripRow(r, statuses, isModal = false) {
       const marginClass = (r.margin || 0) >= 0 ? 'is-positive' : 'is-negative';
       const isCompany = isModal && isCompanyTrip(r);
@@ -6044,11 +6072,13 @@ function buildDailyCompare(data) {
       (stA.rows || []).filter(r => dcQaValidDriver(r.driver)).forEach(r => {
         const k = dcQaRouteKey(r);
         if (!groupA[k]) groupA[k] = { key: k, customer: r.customer || '-', route: r.route || '-', routeDesc: r.routeDesc || '-', vtype: r.vtype || '-', trips: [] };
+        else if (!cleanRouteDisplayText(groupA[k].routeDesc) && cleanRouteDisplayText(r.routeDesc)) groupA[k].routeDesc = r.routeDesc;
         groupA[k].trips.push(r);
       });
       (stB.rows || []).filter(r => dcQaValidDriver(r.driver)).forEach(r => {
         const k = dcQaRouteKey(r);
         if (!groupB[k]) groupB[k] = { key: k, customer: r.customer || '-', route: r.route || '-', routeDesc: r.routeDesc || '-', vtype: r.vtype || '-', trips: [] };
+        else if (!cleanRouteDisplayText(groupB[k].routeDesc) && cleanRouteDisplayText(r.routeDesc)) groupB[k].routeDesc = r.routeDesc;
         groupB[k].trips.push(r);
       });
 
@@ -6097,6 +6127,7 @@ function buildDailyCompare(data) {
       (mySt.rows || []).filter(r => dcQaValidDriver(r.driver)).forEach(r => {
         const k = dcQaRouteKey(r);
         if (!myGroup[k]) myGroup[k] = { key: k, customer: r.customer || '-', route: r.route || '-', routeDesc: r.routeDesc || '-', vtype: r.vtype || '-', trips: [] };
+        else if (!cleanRouteDisplayText(myGroup[k].routeDesc) && cleanRouteDisplayText(r.routeDesc)) myGroup[k].routeDesc = r.routeDesc;
         myGroup[k].trips.push(r);
       });
       (opSt?.rows || []).filter(r => dcQaValidDriver(r.driver)).forEach(r => {
@@ -6184,7 +6215,7 @@ function buildDailyCompare(data) {
       }).sort((a, b) => {
         if (b.severity !== a.severity) return b.severity - a.severity;
         if (b.anomCount !== a.anomCount) return b.anomCount - a.anomCount;
-        return String(a.route.route || '').localeCompare(String(b.route.route || ''), 'th');
+        return routeDisplay(a.route).localeCompare(routeDisplay(b.route), 'th');
       });
 
       const normalOptionKeys = ['loss', 'oil50', 'payHigh', 'oilHigh', 'recvLow', 'normal'];
@@ -6198,11 +6229,11 @@ function buildDailyCompare(data) {
         const previewRows = (anomCount ? rows.filter(r => !r.statuses.includes('normal')) : rows).slice(0, 6);
         const hiddenCount = rows.length - previewRows.length;
         const displayStyle = statuses.some(s => selectedNormalSet.has(s)) ? '' : 'display:none;';
-        return `<article class="dc-qa-case dc-qa-clickable dc-status-card dc-status-card-normal" data-severity="${item.severity}" data-status-keys="${esc(statuses.join(','))}" data-anom-count="${anomCount}" data-trip-count="${rows.length}" style="${displayStyle}" onclick="dcOpenRouteModal('${stA.dateStart}','${stA.dateEnd}','${esc((route.route || '').replace(/'/g, "\\'"))}','${esc((route.customer || '').replace(/'/g, "\\'"))}','${esc((route.vtype || '').replace(/'/g, "\\'"))}','${esc((route.routeDesc || '').replace(/'/g, "\\'"))}')">
+        return `<article class="dc-qa-case dc-qa-clickable dc-status-card dc-status-card-normal" data-severity="${item.severity}" data-status-keys="${esc(statuses.join(','))}" data-anom-count="${anomCount}" data-trip-count="${rows.length}" style="${displayStyle}" onclick="dcOpenRouteModal('${stA.dateStart}','${stA.dateEnd}','${esc(route.route)}','${esc(route.customer)}','${esc(route.vtype)}')">
           <header class="dc-qa-case-head">
             <div class="dc-qa-title-block">
               <div class="dc-qa-identity"><span class="dc-qa-customer">${esc(route.customer || '-')}</span><span class="dc-qa-vtype">${esc(route.vtype || '-')}</span></div>
-              <h3 title="${esc(route.routeDesc || '-')}">${esc(route.route || '-')}</h3>
+              <h3 title="${esc(routeDisplay(route))}">${esc(routeDisplay(route))}</h3>
             </div>
             <div class="dc-qa-head-actions"></div>
           </header>
@@ -6263,7 +6294,7 @@ function buildDailyCompare(data) {
           <header class="dc-qa-case-head">
             <div class="dc-qa-title-block">
               <div class="dc-qa-identity"><span class="dc-qa-customer">${esc(card.ga.customer || '-')}</span><span class="dc-qa-vtype">${esc(card.ga.vtype || '-')}</span></div>
-              <h3 title="${esc(card.ga.routeDesc || '-')}">${esc(card.ga.route || '-')}</h3>
+              <h3 title="${esc(routeDisplay(card.ga))}">${esc(routeDisplay(card.ga))}</h3>
             </div>
             <div class="dc-qa-head-actions"></div>
           </header>
@@ -6308,7 +6339,7 @@ function buildDailyCompare(data) {
           <header class="dc-qa-case-head">
             <div class="dc-qa-title-block">
               <div class="dc-qa-identity"><span class="dc-qa-customer">${esc(card.ga.customer || '-')}</span><span class="dc-qa-vtype">${esc(card.ga.vtype || '-')}</span></div>
-              <h3 title="${esc(card.ga.routeDesc || '-')}">${esc(card.ga.route || '-')}</h3>
+              <h3 title="${esc(routeDisplay(card.ga))}">${esc(routeDisplay(card.ga))}</h3>
             </div>
             <div class="dc-qa-head-actions"></div>
           </header>
@@ -6350,7 +6381,7 @@ function buildDailyCompare(data) {
       </section>`;
     }
 
-    window.dcOpenRouteModal = function (dateStart, dateEnd, routeStr, specificCust, specificVtype, routeDescStr) {
+    window.dcOpenRouteModal = function (dateStart, dateEnd, routeStr, specificCust, specificVtype) {
       const rows = validFd.filter(r =>
         r.date >= dateStart && r.date <= dateEnd && r.route === routeStr &&
         (!specificCust || r.customer === specificCust) &&
@@ -6365,16 +6396,14 @@ function buildDailyCompare(data) {
           return String(a.ra.date || '').localeCompare(String(b.ra.date || ''));
         });
       const body = `<div class="dc-qa-table-wrap is-modal"><table class="dc-qa-table"><thead><tr><th>วันที่</th><th>พขร.</th><th>ประเภทรถ</th><th>ทะเบียน</th><th class="is-right">ราคาน้ำมัน</th><th class="is-right">สำรองน้ำมัน</th><th class="is-right">ราคารับ</th><th class="is-right">ราคาจ่าย</th><th class="is-right">ส่วนต่าง</th><th>ความผิดปกติ</th></tr></thead><tbody>${modalRows.map(row => dcQaSingleTripRow(row.ra, row.statuses, true)).join('')}</tbody></table></div>`;
-      const modalTitle = (routeDescStr && routeDescStr !== '-') ? `${esc(routeStr)} (${esc(routeDescStr)})` : esc(routeStr || '-');
-      dcQaModalShell('dc_route_modal', 'dc_route_capture', modalTitle, `${esc(specificCust || '-')} · ${esc(specificVtype || '-')} · ${esc(fmtRange(dateStart, dateEnd))}`, encodeURIComponent(`route_${routeStr || 'route'}`), body);
+      dcQaModalShell('dc_route_modal', 'dc_route_capture', esc(routeDisplay(rows[0] || { route: routeStr })), `${esc(specificCust || '-')} · ${esc(specificVtype || '-')} · ${esc(fmtRange(dateStart, dateEnd))}`, encodeURIComponent(`route_${routeStr || 'route'}`), body);
     };
 
     window.dcOpenAnomalyModal = function (idx) {
       const card = window._anomalyCardsData?.[idx];
       if (!card) return;
-      const rTitle = (card.ga.routeDesc && card.ga.routeDesc !== '-') ? `${card.ga.route} (${card.ga.routeDesc})` : (card.ga.route || '-');
       const body = `<div class="dc-qa-table-wrap is-modal"><table class="dc-qa-table dc-qa-pair-table"><thead><tr><th>วันที่หลัก</th><th>วันที่เปรียบเทียบ</th><th>พขร.</th><th>ประเภทรถ</th><th>ทะเบียน</th><th>ราคาน้ำมัน</th><th>สำรองน้ำมัน</th><th>ราคารับ</th><th>ราคาจ่าย</th><th class="dc-qa-th-diff">ส่วนต่าง</th><th class="dc-qa-th-flag">ความผิดปกติ</th></tr></thead><tbody>${card.anomRows.map(row => dcQaPairRow(row, true)).join('')}</tbody></table></div>`;
-      dcQaModalShell('dc_anom_modal', 'dc_anom_capture', `รายละเอียดการเปรียบเทียบ: ${esc(rTitle)}`, `${esc(card.ga.customer || '-')} · ${esc(card.ga.vtype || '-')} · ${esc(_labelA)} / ${esc(_labelB)}`, encodeURIComponent(`anomaly_${card.ga.route || 'route'}`), body);
+      dcQaModalShell('dc_anom_modal', 'dc_anom_capture', `รายละเอียดการเปรียบเทียบ: ${esc(routeDisplay(card.ga))}`, `${esc(card.ga.customer || '-')} · ${esc(card.ga.vtype || '-')} · ${esc(_labelA)} / ${esc(_labelB)}`, encodeURIComponent(`anomaly_${card.ga.route || 'route'}`), body);
     };
 
     window.dcOpenUnmatchedModal = function (idx, side) {
@@ -6382,9 +6411,8 @@ function buildDailyCompare(data) {
       if (!card) return;
       const isA = side === 'a';
       const myLabel = isA ? _labelA : _labelB;
-      const rTitle = (card.ga.routeDesc && card.ga.routeDesc !== '-') ? `${card.ga.route} (${card.ga.routeDesc})` : (card.ga.route || '-');
       const body = `<div class="dc-qa-table-wrap is-modal"><table class="dc-qa-table"><thead><tr><th>วันที่</th><th>พขร.</th><th>ประเภทรถ</th><th>ทะเบียน</th><th class="is-right">ราคาน้ำมัน</th><th class="is-right">สำรองน้ำมัน</th><th class="is-right">ราคารับ</th><th class="is-right">ราคาจ่าย</th><th class="is-right">ส่วนต่าง</th><th>ความผิดปกติ</th></tr></thead><tbody>${card.unRows.map(row => dcQaSingleTripRow(row.ra, row.statuses, true)).join('')}</tbody></table></div>`;
-      dcQaModalShell('dc_unm_modal', 'dc_unm_capture', `รายละเอียดเที่ยวที่ไม่มีคู่: ${esc(rTitle)}`, `${esc(card.ga.customer || '-')} · ${esc(card.ga.vtype || '-')} · ${esc(myLabel)}`, encodeURIComponent(`unmatched_${card.ga.route || 'route'}`), body);
+      dcQaModalShell('dc_unm_modal', 'dc_unm_capture', `รายละเอียดเที่ยวที่ไม่มีคู่: ${esc(routeDisplay(card.ga))}`, `${esc(card.ga.customer || '-')} · ${esc(card.ga.vtype || '-')} · ${esc(myLabel)}`, encodeURIComponent(`unmatched_${card.ga.route || 'route'}`), body);
     };
 
     document.getElementById('dc_compare_btn')?.addEventListener('click', dcRunCompare);
@@ -7009,7 +7037,7 @@ async function loadTripsSource() {
   if (API_CACHE.trips) return deepClone(API_CACHE.trips);
   if (isApiEnabled()) {
     try {
-      const fields = 'date,customer,route,vtype,driver,plate,payee,recv,pay,oil,margin';
+      const fields = 'date,customer,route,routeDesc,vtype,driver,plate,payee,recv,pay,oil,margin';
       const pageSize = 5000;
       const maxPages = 100;
       let page = 0;
