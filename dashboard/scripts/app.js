@@ -6365,14 +6365,14 @@ function buildDailyCompare(data) {
           return String(a.ra.date || '').localeCompare(String(b.ra.date || ''));
         });
       const body = `<div class="dc-qa-table-wrap is-modal"><table class="dc-qa-table"><thead><tr><th>วันที่</th><th>พขร.</th><th>ประเภทรถ</th><th>ทะเบียน</th><th class="is-right">ราคาน้ำมัน</th><th class="is-right">สำรองน้ำมัน</th><th class="is-right">ราคารับ</th><th class="is-right">ราคาจ่าย</th><th class="is-right">ส่วนต่าง</th><th>ความผิดปกติ</th></tr></thead><tbody>${modalRows.map(row => dcQaSingleTripRow(row.ra, row.statuses, true)).join('')}</tbody></table></div>`;
-      const modalTitle = routeDescStr ? `${esc(routeDescStr)}` : esc(routeStr || '-');
+      const modalTitle = (routeDescStr && routeDescStr !== '-') ? `${esc(routeDescStr)}` : esc(routeStr || '-');
       dcQaModalShell('dc_route_modal', 'dc_route_capture', modalTitle, `${esc(specificCust || '-')} · ${esc(specificVtype || '-')} · ${esc(fmtRange(dateStart, dateEnd))}`, encodeURIComponent(`route_${routeStr || 'route'}`), body);
     };
 
     window.dcOpenAnomalyModal = function (idx) {
       const card = window._anomalyCardsData?.[idx];
       if (!card) return;
-      const rTitle = card.ga.routeDesc || card.ga.route || '-';
+      const rTitle = (card.ga.routeDesc && card.ga.routeDesc !== '-') ? card.ga.routeDesc : (card.ga.route || '-');
       const body = `<div class="dc-qa-table-wrap is-modal"><table class="dc-qa-table dc-qa-pair-table"><thead><tr><th>วันที่หลัก</th><th>วันที่เปรียบเทียบ</th><th>พขร.</th><th>ประเภทรถ</th><th>ทะเบียน</th><th>ราคาน้ำมัน</th><th>สำรองน้ำมัน</th><th>ราคารับ</th><th>ราคาจ่าย</th><th class="dc-qa-th-diff">ส่วนต่าง</th><th class="dc-qa-th-flag">ความผิดปกติ</th></tr></thead><tbody>${card.anomRows.map(row => dcQaPairRow(row, true)).join('')}</tbody></table></div>`;
       dcQaModalShell('dc_anom_modal', 'dc_anom_capture', `รายละเอียดการเปรียบเทียบ: ${esc(rTitle)}`, `${esc(card.ga.customer || '-')} · ${esc(card.ga.vtype || '-')} · ${esc(_labelA)} / ${esc(_labelB)}`, encodeURIComponent(`anomaly_${card.ga.route || 'route'}`), body);
     };
@@ -6382,7 +6382,7 @@ function buildDailyCompare(data) {
       if (!card) return;
       const isA = side === 'a';
       const myLabel = isA ? _labelA : _labelB;
-      const rTitle = card.ga.routeDesc || card.ga.route || '-';
+      const rTitle = (card.ga.routeDesc && card.ga.routeDesc !== '-') ? card.ga.routeDesc : (card.ga.route || '-');
       const body = `<div class="dc-qa-table-wrap is-modal"><table class="dc-qa-table"><thead><tr><th>วันที่</th><th>พขร.</th><th>ประเภทรถ</th><th>ทะเบียน</th><th class="is-right">ราคาน้ำมัน</th><th class="is-right">สำรองน้ำมัน</th><th class="is-right">ราคารับ</th><th class="is-right">ราคาจ่าย</th><th class="is-right">ส่วนต่าง</th><th>ความผิดปกติ</th></tr></thead><tbody>${card.unRows.map(row => dcQaSingleTripRow(row.ra, row.statuses, true)).join('')}</tbody></table></div>`;
       dcQaModalShell('dc_unm_modal', 'dc_unm_capture', `รายละเอียดเที่ยวที่ไม่มีคู่: ${esc(rTitle)}`, `${esc(card.ga.customer || '-')} · ${esc(card.ga.vtype || '-')} · ${esc(myLabel)}`, encodeURIComponent(`unmatched_${card.ga.route || 'route'}`), body);
     };
