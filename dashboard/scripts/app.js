@@ -3743,7 +3743,7 @@ function buildDailyCompare(data) {
     const routeMap = {};
     rows.forEach(r => {
       const k = `${r.customer || '-'}|${r.route || '-'}|${r.vtype || '-'}`;
-      if (!routeMap[k]) routeMap[k] = { customer: r.customer || '-', route: r.route || '-', vtype: r.vtype || '-', recv: 0, pay: 0, oil: 0, margin: 0, trips: 0 };
+      if (!routeMap[k]) routeMap[k] = { customer: r.customer || '-', route: r.route || '-', routeDesc: r.routeDesc || r.route || '-', vtype: r.vtype || '-', recv: 0, pay: 0, oil: 0, margin: 0, trips: 0 };
       routeMap[k].recv += r.recv || 0; routeMap[k].pay += r.pay || 0; routeMap[k].oil += r.oil || 0; routeMap[k].margin += r.margin || 0; routeMap[k].trips++;
     });
     const routes = Object.values(routeMap)
@@ -5272,7 +5272,7 @@ function buildDailyCompare(data) {
             const routeFill = item.anomCount > 0 ? 'FEF2F2' : 'ECFDF5';
             const routeRow = [
               cCell(route.customer || '-', { fill: routeFill, bold: true }),
-              cCell(route.route || '-', { fill: routeFill, bold: true }),
+              cCell(route.routeDesc || route.route || '-', { fill: routeFill, bold: true }),
               cCell('รวม ' + (item.rows || []).length + ' เที่ยว', { fill: routeFill }),
               cCell('', { fill: routeFill }),
               cCell(route.vtype || '-', { fill: routeFill, bold: true }),
@@ -5294,7 +5294,7 @@ function buildDailyCompare(data) {
               const zf = (rowIdx % 2 === 0) ? 'F9FAFB' : null;
               wsData.push([
                 cCell(r.customer || '-', { fill: zf }),
-                cCell(r.route || '-', { fill: zf }),
+                cCell(r.routeDesc || r.route || '-', { fill: zf }),
                 cCell(r.date || '-', { fill: zf }),
                 cCell(r.driver || '-', { fill: zf }),
                 cCell(r.vtype || '-', { fill: zf }),
@@ -5365,7 +5365,7 @@ function buildDailyCompare(data) {
             : 'รวม ' + (card.rows || []).length + ' เที่ยว';
           const top = [
             cCell(card.ga.customer || '-', { bold: true, fill: 'DBEAFE' }),
-            cCell(card.ga.route || '-', { bold: true, fill: 'DBEAFE' }),
+            cCell(card.ga.routeDesc || card.ga.route || '-', { bold: true, fill: 'DBEAFE' }),
             cCell('ประเภทรถ: ' + (card.ga.vtype || '-'), { bold: true, fill: 'DBEAFE', wrap: false }),
             cCell('', { fill: 'DBEAFE' }),   // D — merged with C
             cCell(summaryText, { bold: true, fill: 'DBEAFE' }),
@@ -5384,7 +5384,7 @@ function buildDailyCompare(data) {
             const zf = (rowIdx % 2 === 0) ? 'F9FAFB' : null;
             const row = [
               cCell(r.customer || '-', { fill: zf }),
-              cCell(r.route || '-', { fill: zf }),
+              cCell(r.routeDesc || r.route || '-', { fill: zf }),
               cCell(r.date || '-', { fill: zf }),
               cCell(r.driver || '-', { fill: zf }),
               cCell(r.vtype || '-', { fill: zf }),
@@ -5586,7 +5586,7 @@ function buildDailyCompare(data) {
             : 'รวม ' + (card.rows || []).length + ' คู่เปรียบเทียบ';
           const top = [
             cCell(card.ga.customer || '-', { bold: true, fill: 'DBEAFE' }),
-            cCell(card.ga.route || '-', { bold: true, fill: 'DBEAFE' }),
+            cCell(card.ga.routeDesc || card.ga.route || '-', { bold: true, fill: 'DBEAFE' }),
             cCell('ประเภทรถ: ' + (card.ga.vtype || '-'), { bold: true, fill: 'DBEAFE' }),
             cCell('', { fill: 'DBEAFE' }),                                    // D — merged with C
             cCell(summaryText, { bold: true, fill: 'DBEAFE' }),
@@ -5611,7 +5611,7 @@ function buildDailyCompare(data) {
             const bOptsNeutral = f => ({ fill: f, align: 'right', wrap: true, valign: 'top', neutralColor: true });
             const row = [
               cCell(ra.customer || rb.customer || '-', { fill: zf }),
-              cCell(ra.route || rb.route || '-', { fill: zf }),
+              cCell(ra.routeDesc || rb.routeDesc || ra.route || rb.route || '-', { fill: zf }),
               cCell(ra.date || '-', { fill: zf }),
               cCell(rb.date || '-', { fill: zf }),
               cCell(ra.driver || rb.driver || '-', { fill: zf }),
@@ -6006,12 +6006,12 @@ function buildDailyCompare(data) {
       const groupA = {}, groupB = {};
       (stA.rows || []).filter(r => dcQaValidDriver(r.driver)).forEach(r => {
         const k = dcQaRouteKey(r);
-        if (!groupA[k]) groupA[k] = { key: k, customer: r.customer || '-', route: r.route || '-', vtype: r.vtype || '-', trips: [] };
+        if (!groupA[k]) groupA[k] = { key: k, customer: r.customer || '-', route: r.route || '-', routeDesc: r.routeDesc || r.route || '-', vtype: r.vtype || '-', trips: [] };
         groupA[k].trips.push(r);
       });
       (stB.rows || []).filter(r => dcQaValidDriver(r.driver)).forEach(r => {
         const k = dcQaRouteKey(r);
-        if (!groupB[k]) groupB[k] = { key: k, customer: r.customer || '-', route: r.route || '-', vtype: r.vtype || '-', trips: [] };
+        if (!groupB[k]) groupB[k] = { key: k, customer: r.customer || '-', route: r.route || '-', routeDesc: r.routeDesc || r.route || '-', vtype: r.vtype || '-', trips: [] };
         groupB[k].trips.push(r);
       });
 
@@ -6059,7 +6059,7 @@ function buildDailyCompare(data) {
       const myGroup = {}, opGroup = {};
       (mySt.rows || []).filter(r => dcQaValidDriver(r.driver)).forEach(r => {
         const k = dcQaRouteKey(r);
-        if (!myGroup[k]) myGroup[k] = { key: k, customer: r.customer || '-', route: r.route || '-', vtype: r.vtype || '-', trips: [] };
+        if (!myGroup[k]) myGroup[k] = { key: k, customer: r.customer || '-', route: r.route || '-', routeDesc: r.routeDesc || r.route || '-', vtype: r.vtype || '-', trips: [] };
         myGroup[k].trips.push(r);
       });
       (opSt?.rows || []).filter(r => dcQaValidDriver(r.driver)).forEach(r => {
@@ -6161,11 +6161,11 @@ function buildDailyCompare(data) {
         const previewRows = (anomCount ? rows.filter(r => !r.statuses.includes('normal')) : rows).slice(0, 6);
         const hiddenCount = rows.length - previewRows.length;
         const displayStyle = statuses.some(s => selectedNormalSet.has(s)) ? '' : 'display:none;';
-        return `<article class="dc-qa-case dc-qa-clickable dc-status-card dc-status-card-normal" data-severity="${item.severity}" data-status-keys="${esc(statuses.join(','))}" data-anom-count="${anomCount}" data-trip-count="${rows.length}" style="${displayStyle}" onclick="dcOpenRouteModal('${stA.dateStart}','${stA.dateEnd}','${esc(route.route)}','${esc(route.customer)}','${esc(route.vtype)}')">
+        return `<article class="dc-qa-case dc-qa-clickable dc-status-card dc-status-card-normal" data-severity="${item.severity}" data-status-keys="${esc(statuses.join(','))}" data-anom-count="${anomCount}" data-trip-count="${rows.length}" style="${displayStyle}" onclick="dcOpenRouteModal('${stA.dateStart}','${stA.dateEnd}','${esc((route.route || '').replace(/'/g, "\\'"))}','${esc((route.customer || '').replace(/'/g, "\\'"))}','${esc((route.vtype || '').replace(/'/g, "\\'"))}','${esc((route.routeDesc || '').replace(/'/g, "\\'"))}')">
           <header class="dc-qa-case-head">
             <div class="dc-qa-title-block">
               <div class="dc-qa-identity"><span class="dc-qa-customer">${esc(route.customer || '-')}</span><span class="dc-qa-vtype">${esc(route.vtype || '-')}</span></div>
-              <h3 title="${esc(route.route || '-')}">${esc(route.route || '-')}</h3>
+              <h3 title="${esc(route.route || '-')}">${esc(route.routeDesc || route.route || '-')}</h3>
             </div>
             <div class="dc-qa-head-actions"></div>
           </header>
@@ -6226,7 +6226,7 @@ function buildDailyCompare(data) {
           <header class="dc-qa-case-head">
             <div class="dc-qa-title-block">
               <div class="dc-qa-identity"><span class="dc-qa-customer">${esc(card.ga.customer || '-')}</span><span class="dc-qa-vtype">${esc(card.ga.vtype || '-')}</span></div>
-              <h3 title="${esc(card.ga.route)}">${esc(card.ga.route)}</h3>
+              <h3 title="${esc(card.ga.route || '-')}">${esc(card.ga.routeDesc || card.ga.route || '-')}</h3>
             </div>
             <div class="dc-qa-head-actions"></div>
           </header>
@@ -6271,7 +6271,7 @@ function buildDailyCompare(data) {
           <header class="dc-qa-case-head">
             <div class="dc-qa-title-block">
               <div class="dc-qa-identity"><span class="dc-qa-customer">${esc(card.ga.customer || '-')}</span><span class="dc-qa-vtype">${esc(card.ga.vtype || '-')}</span></div>
-              <h3 title="${esc(card.ga.route)}">${esc(card.ga.route)}</h3>
+              <h3 title="${esc(card.ga.route || '-')}">${esc(card.ga.routeDesc || card.ga.route || '-')}</h3>
             </div>
             <div class="dc-qa-head-actions"></div>
           </header>
@@ -6313,7 +6313,7 @@ function buildDailyCompare(data) {
       </section>`;
     }
 
-    window.dcOpenRouteModal = function (dateStart, dateEnd, routeStr, specificCust, specificVtype) {
+    window.dcOpenRouteModal = function (dateStart, dateEnd, routeStr, specificCust, specificVtype, routeDescStr) {
       const rows = validFd.filter(r =>
         r.date >= dateStart && r.date <= dateEnd && r.route === routeStr &&
         (!specificCust || r.customer === specificCust) &&
@@ -6328,14 +6328,16 @@ function buildDailyCompare(data) {
           return String(a.ra.date || '').localeCompare(String(b.ra.date || ''));
         });
       const body = `<div class="dc-qa-table-wrap is-modal"><table class="dc-qa-table"><thead><tr><th>วันที่</th><th>พขร.</th><th>ประเภทรถ</th><th>ทะเบียน</th><th class="is-right">ราคาน้ำมัน</th><th class="is-right">สำรองน้ำมัน</th><th class="is-right">ราคารับ</th><th class="is-right">ราคาจ่าย</th><th class="is-right">ส่วนต่าง</th><th>ความผิดปกติ</th></tr></thead><tbody>${modalRows.map(row => dcQaSingleTripRow(row.ra, row.statuses, true)).join('')}</tbody></table></div>`;
-      dcQaModalShell('dc_route_modal', 'dc_route_capture', esc(routeStr || '-'), `${esc(specificCust || '-')} · ${esc(specificVtype || '-')} · ${esc(fmtRange(dateStart, dateEnd))}`, encodeURIComponent(`route_${routeStr || 'route'}`), body);
+      const modalTitle = routeDescStr ? `${esc(routeDescStr)}` : esc(routeStr || '-');
+      dcQaModalShell('dc_route_modal', 'dc_route_capture', modalTitle, `${esc(specificCust || '-')} · ${esc(specificVtype || '-')} · ${esc(fmtRange(dateStart, dateEnd))}`, encodeURIComponent(`route_${routeStr || 'route'}`), body);
     };
 
     window.dcOpenAnomalyModal = function (idx) {
       const card = window._anomalyCardsData?.[idx];
       if (!card) return;
+      const rTitle = card.ga.routeDesc || card.ga.route || '-';
       const body = `<div class="dc-qa-table-wrap is-modal"><table class="dc-qa-table dc-qa-pair-table"><thead><tr><th>วันที่หลัก</th><th>วันที่เปรียบเทียบ</th><th>พขร.</th><th>ประเภทรถ</th><th>ทะเบียน</th><th>ราคาน้ำมัน</th><th>สำรองน้ำมัน</th><th>ราคารับ</th><th>ราคาจ่าย</th><th class="dc-qa-th-diff">ส่วนต่าง</th><th class="dc-qa-th-flag">ความผิดปกติ</th></tr></thead><tbody>${card.anomRows.map(row => dcQaPairRow(row, true)).join('')}</tbody></table></div>`;
-      dcQaModalShell('dc_anom_modal', 'dc_anom_capture', `รายละเอียดการเปรียบเทียบ: ${esc(card.ga.route || '-')}`, `${esc(card.ga.customer || '-')} · ${esc(card.ga.vtype || '-')} · ${esc(_labelA)} / ${esc(_labelB)}`, encodeURIComponent(`anomaly_${card.ga.route || 'route'}`), body);
+      dcQaModalShell('dc_anom_modal', 'dc_anom_capture', `รายละเอียดการเปรียบเทียบ: ${esc(rTitle)}`, `${esc(card.ga.customer || '-')} · ${esc(card.ga.vtype || '-')} · ${esc(_labelA)} / ${esc(_labelB)}`, encodeURIComponent(`anomaly_${card.ga.route || 'route'}`), body);
     };
 
     window.dcOpenUnmatchedModal = function (idx, side) {
@@ -6343,8 +6345,9 @@ function buildDailyCompare(data) {
       if (!card) return;
       const isA = side === 'a';
       const myLabel = isA ? _labelA : _labelB;
+      const rTitle = card.ga.routeDesc || card.ga.route || '-';
       const body = `<div class="dc-qa-table-wrap is-modal"><table class="dc-qa-table"><thead><tr><th>วันที่</th><th>พขร.</th><th>ประเภทรถ</th><th>ทะเบียน</th><th class="is-right">ราคาน้ำมัน</th><th class="is-right">สำรองน้ำมัน</th><th class="is-right">ราคารับ</th><th class="is-right">ราคาจ่าย</th><th class="is-right">ส่วนต่าง</th><th>ความผิดปกติ</th></tr></thead><tbody>${card.unRows.map(row => dcQaSingleTripRow(row.ra, row.statuses, true)).join('')}</tbody></table></div>`;
-      dcQaModalShell('dc_unm_modal', 'dc_unm_capture', `รายละเอียดเที่ยวที่ไม่มีคู่: ${esc(card.ga.route || '-')}`, `${esc(card.ga.customer || '-')} · ${esc(card.ga.vtype || '-')} · ${esc(myLabel)}`, encodeURIComponent(`unmatched_${card.ga.route || 'route'}`), body);
+      dcQaModalShell('dc_unm_modal', 'dc_unm_capture', `รายละเอียดเที่ยวที่ไม่มีคู่: ${esc(rTitle)}`, `${esc(card.ga.customer || '-')} · ${esc(card.ga.vtype || '-')} · ${esc(myLabel)}`, encodeURIComponent(`unmatched_${card.ga.route || 'route'}`), body);
     };
 
     document.getElementById('dc_compare_btn')?.addEventListener('click', dcRunCompare);
