@@ -3846,7 +3846,7 @@ function buildDailyCompare(data) {
     }
     .dc-action-btn {
       width: auto;
-      height: 36px;
+      height: 32px;
       box-sizing: border-box;
       padding: 6px 16px;
       border: none;
@@ -4024,7 +4024,7 @@ function buildDailyCompare(data) {
       <div style="border-top:1px solid rgba(255,255,255,.05);padding:8px 20px;display:grid;grid-template-columns:1fr 2fr 1fr auto;gap:12px;align-items:end">
 
         <div style="position:relative;z-index:50">
-          <div style="font-size:11.5px;font-weight:600;color:#e2e8f0;margin-bottom:6px;letter-spacing:0.5px">ลูกค้า</div>
+          <div style="font-size:10px;font-weight:450;color:#94a3b8;margin-bottom:6px;letter-spacing:0.5px">ลูกค้า</div>
           <div id="ms_btn_cust" class="dc-ms-btn" onclick="dcToggleMs('cust',event)">
             <span id="ms_lbl_cust" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px">ทั้งหมด</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><polyline points="6 9 12 15 18 9"></polyline></svg>
@@ -4033,7 +4033,7 @@ function buildDailyCompare(data) {
         </div>
 
         <div style="position:relative;z-index:50">
-          <div style="font-size:11.5px;font-weight:600;color:#e2e8f0;margin-bottom:6px;letter-spacing:0.5px">เส้นทาง</div>
+          <div style="font-size:10px;font-weight:450;color:#94a3b8;margin-bottom:6px;letter-spacing:0.5px">เส้นทาง</div>
           <div id="ms_btn_route" class="dc-ms-btn" onclick="dcToggleMs('route',event)">
             <span id="ms_lbl_route" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px">ทั้งหมด</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><polyline points="6 9 12 15 18 9"></polyline></svg>
@@ -4042,7 +4042,7 @@ function buildDailyCompare(data) {
         </div>
 
         <div style="position:relative;z-index:50">
-          <div style="font-size:11.5px;font-weight:600;color:#e2e8f0;margin-bottom:6px;letter-spacing:0.5px">ประเภทรถ</div>
+          <div style="font-size:10px;font-weight:450;color:#94a3b8;margin-bottom:6px;letter-spacing:0.5px">ประเภทรถ</div>
           <div id="ms_btn_vtype" class="dc-ms-btn" onclick="dcToggleMs('vtype',event)">
             <span id="ms_lbl_vtype" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px">ทั้งหมด</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><polyline points="6 9 12 15 18 9"></polyline></svg>
@@ -4050,8 +4050,8 @@ function buildDailyCompare(data) {
           <div id="ms_pnl_vtype" class="dc-ms-panel"></div>
         </div>
 
-        <div style="display:flex;align-items:center;gap:8px;padding-bottom:1px">
-          <div style="display:flex;background:rgba(0,0,0,.2);border-radius:6px;padding:2px;border:1px solid rgba(255,255,255,.05);height:36px;box-sizing:border-box;align-items:center">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="display:flex;background:rgba(0,0,0,.2);border-radius:6px;padding:2px;border:1px solid rgba(255,255,255,.05);height:32px;box-sizing:border-box;align-items:center">
             <button id="dc_mode_single" onclick="dcSetMode('single')"
               style="padding:0 16px;background:transparent;color:var(--muted);border:1px solid transparent;border-radius:4px;font-weight:700;font-size:12px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:all .2s;height:100%;display:flex;align-items:center">
               มุมมองปกติ
@@ -4073,7 +4073,7 @@ function buildDailyCompare(data) {
             Export XLSX
           </button>
           <button onclick="dcClearFilters()"
-            style="padding:0 16px;background:transparent;border:1px solid rgba(255,255,255,.08);border-radius:6px;color:#475569;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;white-space:nowrap;transition:all .2s;height:36px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center"
+            style="padding:0 16px;background:transparent;border:1px solid rgba(255,255,255,.08);border-radius:6px;color:#475569;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;white-space:nowrap;transition:all .2s;height:32px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center"
             onmouseover="this.style.borderColor='rgba(239,68,68,.5)';this.style.color='#ef4444';this.style.background='rgba(239,68,68,.05)'"
             onmouseout="this.style.borderColor='rgba(255,255,255,.08)';this.style.color='#475569';this.style.background='transparent'">
             ล้างตัวกรอง
@@ -6068,8 +6068,27 @@ function buildDailyCompare(data) {
           </header>
           <div class="dc-qa-case-strip"><span>${esc(myLabel)}</span><span>ไม่มีคู่เปรียบเทียบอีกช่วง</span><span>${anomCount ? `ต้องตรวจสอบ ${anomCount} เที่ยว` : 'ไม่พบความผิดปกติเพิ่มเติม'}</span></div>
           <div class="dc-qa-table-wrap">
-            <table class="dc-qa-table">
-              <thead><tr><th>วันที่</th><th>พขร.</th><th class="is-right">ราคาน้ำมัน</th><th class="is-right">สำรองน้ำมัน</th><th class="is-right">ราคารับ</th><th class="is-right">ราคาจ่าย</th><th class="is-right">ส่วนต่าง</th><th>ความผิดปกติ</th></tr></thead>
+            <table class="dc-qa-table dc-qa-single-table">
+              <colgroup>
+                <col style="width:88px">
+                <col style="min-width:130px;width:18%">
+                <col style="width:96px">
+                <col style="width:100px">
+                <col style="width:96px">
+                <col style="width:96px">
+                <col style="width:96px">
+                <col style="min-width:160px">
+              </colgroup>
+              <thead><tr>
+                <th>วันที่</th>
+                <th>พขร.</th>
+                <th class="is-right">ราคาน้ำมัน</th>
+                <th class="is-right">สำรองน้ำมัน</th>
+                <th class="is-right">ราคารับ</th>
+                <th class="is-right">ราคาจ่าย</th>
+                <th class="is-right">ส่วนต่าง</th>
+                <th class="dc-qa-th-flag">ความผิดปกติ</th>
+              </tr></thead>
               <tbody>${card.unRows.slice(0, 6).map(row => dcQaSingleTripRow(row.ra, row.statuses, false)).join('')}</tbody>
             </table>
           </div>
