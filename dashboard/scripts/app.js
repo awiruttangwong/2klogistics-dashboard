@@ -3765,122 +3765,11 @@ function buildDailyCompare(data) {
     return match ? match.price : null;
   }
 
-  // CLEANUP NOTE (Daily Compare legacy modal):
-  // This original route modal is intentionally left in place for rollback while the
-  // QA review layout is being tuned. It is superseded later in this same scope by
-  // the "ACTIVE QA RENDER OVERRIDES" block before dcRunCompare() is first called.
-  // Once the QA layout is accepted, this legacy modal can be removed together with
-  // the legacy renderAll/renderSingleTable/renderAnomalyTable/renderUnmatchedTable
-  // and legacy anomaly/unmatched modal functions below.
-  window.dcOpenRouteModal = function (dateStart, dateEnd, routeStr, specificCust, specificVtype) {
-    const rows = validFd.filter(r =>
-      r.date >= dateStart && r.date <= dateEnd && r.route === routeStr &&
-      (!specificCust || r.customer === specificCust) &&
-      (!specificVtype || r.vtype === specificVtype)
-    );
-    if (!rows.length) return;
-    const existing = document.getElementById('dc_route_modal');
-    if (existing) existing.remove();
-    const modal = document.createElement('div');
-    modal.id = 'dc_route_modal';
-    modal.style = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)';
-    modal.onclick = e => { if (e.target === modal) modal.remove(); };
-    const avgPay = rows.reduce((s, r) => s + (r.pay || 0), 0) / rows.length;
-    const avgOil = rows.reduce((s, r) => s + (r.oil || 0), 0) / rows.length;
-    const avgRecv = rows.reduce((s, r) => s + (r.recv || 0), 0) / rows.length;
-    const colorMap = { red: '#ef4444', orange: '#f97316', purple: '#a855f7', blue: '#3b82f6' };
-    const causeTag = (t, c) => `<span style="display:inline-block;margin:1px 2px 1px 0;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:400;background:${colorMap[c] || 'var(--muted)'};color:#fff;white-space:nowrap">${t}</span>`;
-    let trs = '', totRcv = 0, totPay = 0, totOil = 0, totMg = 0;
-    rows.forEach((r, idx) => {
-      const mg = r.margin || 0; const mCls = mg >= 0 ? 'green' : 'red';
-      totRcv += r.recv || 0; totPay += r.pay || 0; totOil += r.oil || 0; totMg += mg;
-      const causes = [];
-      if (mg < 0) { const lp = r.recv > 0 ? Math.abs(mg / r.recv * 100) : 0; causes.push(causeTag(`ขาดทุน ${lp.toFixed(0)}%`, 'red')); }
-      if ((r.oil || 0) > (r.pay || 0) * 0.5 && (r.pay || 0) > 0) causes.push(causeTag('สำรองน้ำมัน>50%', 'orange'));
-      if (rows.length > 1) {
-        if (avgPay > 0 && (r.pay || 0) > avgPay * 1.05) causes.push(causeTag('ราคาจ่ายแพงกว่าค่าเฉลี่ย', 'purple'));
-        if (avgOil > 0 && (r.oil || 0) > avgOil * 1.10) causes.push(causeTag('สำรองน้ำมันแพงกว่าค่าเฉลี่ย', 'orange'));
-        if (avgRecv > 0 && (r.recv || 0) < avgRecv * 0.95) causes.push(causeTag('ราคารับต่ำกว่าค่าเฉลี่ย', 'blue'));
-      }
-      const causeCell = causes.length ? `<div class="dc-tags-wrap">${causes.join('')}</div>` : `<span style="color:var(--muted)">-</span>`;
-      const oilPrice = getOilPriceByDate(r.date);
-      const oilPriceFmt = oilPrice !== null ? fmt(oilPrice) + ' <span style="font-size:10px;color:var(--muted)">บ./ล.</span>' : '<span style="color:var(--muted)">-</span>';
-      trs += `<tr style="border-bottom:1px solid var(--border)">
-        <td style="padding:9px 12px;font-weight:400;color:var(--muted)">${idx + 1}</td>
-        <td style="padding:9px 12px;font-weight:400">${esc(r.date || '-')}</td>
-        <td style="padding:9px 12px;font-weight:400">${esc(r.driver || '-')}</td>
-        <td style="padding:9px 12px;font-weight:400;color:var(--muted)">${esc(r.vtype || '-')}</td>
-        <td style="padding:9px 12px;font-weight:400;font-family:monospace;color:var(--accent)">${esc(r.plate || '-')}</td>
-        <td style="padding:9px 12px;text-align:center;font-weight:400;color:var(--text)">${oilPriceFmt}</td>
-        <td style="padding:9px 12px;text-align:right;font-weight:400;color:var(--orange)">${fmt(r.oil)}</td>
-        <td style="padding:9px 12px;text-align:right;font-weight:400">${fmt(r.recv)}</td>
-        <td style="padding:9px 12px;text-align:right;font-weight:400">${fmt(r.pay)}</td>
-        <td style="padding:9px 12px;text-align:right;font-weight:400;color:var(--${mCls})">${fmt(mg)}</td>
-        <td style="padding:9px 12px">${causeCell}</td>
-      </tr>`;
-    });
-    const labelRange = dateStart === dateEnd ? dateStart : `${dateStart} → ${dateEnd}`;
-    const exportIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="16" height="16" fill="#5985E1" aria-hidden="true"><path d="M240-80q-33 0-56.5-23.5T160-160v-400q0-33 23.5-56.5T240-640h120v80H240v400h480v-400H600v-80h120q33 0 56.5 23.5T800-560v400q0 33-23.5 56.5T720-80H240Zm200-240v-447l-64 64-56-57 160-160 160 160-56 57-64-64v447h-80Z"/></svg>';
-    const exportBase = encodeURIComponent(`route_${routeStr || 'route'}`);
-    modal.innerHTML = `
-      <div id="dc_route_capture" data-export-root="1" style="background:var(--card);border:1px solid var(--border);border-radius:16px;max-width:1060px;width:100%;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.6)">
-        <div style="background:var(--surface);padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
-          <div style="min-width:0">
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-              <div style="font-size:16px;font-weight:800;color:var(--accent)">${esc(routeStr)}</div>
-              <button type="button" onclick="window.dcExportModalPng('dc_route_capture', '${exportBase}')" title="Export PNG" aria-label="Export PNG"
-                style="background:rgba(89,133,225,.10);border:1px solid rgba(89,133,225,.35);color:#dbeafe;width:28px;height:28px;border-radius:7px;cursor:pointer;line-height:1;display:inline-flex;align-items:center;justify-content:center;transition:all .2s;padding:0"
-                onmouseover="this.style.background='rgba(89,133,225,.18)';this.style.borderColor='rgba(89,133,225,.55)'"
-                onmouseout="this.style.background='rgba(89,133,225,.10)';this.style.borderColor='rgba(89,133,225,.35)'">${exportIcon}</button>
-            </div>
-            <div style="font-size:12px;color:var(--muted);margin-top:4px">${labelRange} · ${rows.length} เที่ยว</div>
-          </div>
-          <button onclick="document.getElementById('dc_route_modal').remove()"
-            style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:5px 13px;cursor:pointer;font-size:18px;line-height:1">&times;</button>
-        </div>
-        <div style="padding:20px;overflow-y:auto">
-          <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden">
-            <table style="width:100%;border-collapse:collapse;font-size:12px">
-              <thead style="background:var(--surface);position:sticky;top:0;z-index:2">
-                <tr style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px">
-                  <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)">ลำดับ</th>
-                  <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)">วันที่</th>
-                  <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)">พขร.</th>
-                  <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)">ประเภทรถ</th>
-                  <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)">ทะเบียน</th>
-                  <th style="padding:10px 12px;text-align:center;border-bottom:1px solid var(--border)">ราคาน้ำมัน</th>
-                  <th style="padding:10px 12px;text-align:right;border-bottom:1px solid var(--border)">สำรองน้ำมัน</th>
-                  <th style="padding:10px 12px;text-align:right;border-bottom:1px solid var(--border)">ราคารับ</th>
-                  <th style="padding:10px 12px;text-align:right;border-bottom:1px solid var(--border)">ราคาจ่าย</th>
-                  <th style="padding:10px 12px;text-align:right;border-bottom:1px solid var(--border)">ส่วนต่าง</th>
-                  <th style="padding:10px 12px;border-bottom:1px solid var(--border)">ความผิดปกติ</th>
-                </tr>
-              </thead>
-              <tbody>${trs}</tbody>
-              <tfoot>
-                <tr style="background:rgba(59,130,246,.08);border-top:2px solid rgba(59,130,246,.3)">
-                  <td colspan="6" style="padding:11px 12px;font-weight:400;font-size:11px;text-transform:uppercase;letter-spacing:.5px">รวม ${rows.length} เที่ยว</td>
-                  <td style="padding:11px 12px;text-align:right;font-weight:400;color:var(--orange)">${fmt(totOil)}</td>
-                  <td style="padding:11px 12px;text-align:right;font-weight:400">${fmt(totRcv)}</td>
-                  <td style="padding:11px 12px;text-align:right;font-weight:400">${fmt(totPay)}</td>
-                  <td style="padding:11px 12px;text-align:right;font-weight:400;color:var(--${totMg >= 0 ? 'green' : 'red'})">${fmt(totMg)}</td>
-                  <td></td>
-                </tr>
-                <tr style="background:rgba(59,130,246,.05);border-top:1px solid rgba(255,255,255,.06)">
-                  <td colspan="6" style="padding:11px 12px;font-weight:400;font-size:11px;text-transform:uppercase;letter-spacing:.5px">เฉลี่ย / เที่ยว</td>
-                  <td style="padding:11px 12px;text-align:right;font-weight:400;color:var(--orange)">${fmt(Math.round(totOil / rows.length))}</td>
-                  <td style="padding:11px 12px;text-align:right;font-weight:400">${fmt(Math.round(totRcv / rows.length))}</td>
-                  <td style="padding:11px 12px;text-align:right;font-weight:400">${fmt(Math.round(totPay / rows.length))}</td>
-                  <td style="padding:11px 12px;text-align:right;font-weight:400;color:var(--${totMg >= 0 ? 'green' : 'red'})">${fmt(Math.round(totMg / rows.length))}</td>
-                  <td></td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
-      </div>`;
-    document.body.appendChild(modal);
-  };
+  // CLEANUP: Legacy dcOpenRouteModal removed.
+  // Active implementation lives inside the "ACTIVE QA RENDER OVERRIDES" block
+  // near the bottom of buildDailyCompare() and uses dcQaTripStatuses() with
+  // the new per-row peer logic (no avg, no * 1.05).
+  window.dcOpenRouteModal = function () { /* overridden by ACTIVE QA RENDER OVERRIDES */ };
 
   // defaults
   const d1def = allDates[allDates.length - 1] || '';
@@ -4538,46 +4427,9 @@ function buildDailyCompare(data) {
       const stBKey = _stB ? `${_stB.rows?.length || 0}|${_stB.routes?.length || 0}|${_stB.trips || 0}|${_stB.recv || 0}|${_stB.margin || 0}` : 'nb';
       return [_isSingleMode ? 1 : 0, _viewMode || 'anomaly', _labelA || '', _labelB || '', stAKey, stBKey, fNormal, fAn, fUa, fUb].join('||');
     }
-    // CLEANUP NOTE (Daily Compare legacy renderers):
-    // The renderer functions from this point through the original unmatched modal
-    // are kept only as rollback/reference code. The active UI is overridden near
-    // the bottom of buildDailyCompare() in the "ACTIVE QA RENDER OVERRIDES" block.
-    // Do not edit these legacy renderers for the current QA layout unless the
-    // override block is removed.
-    function renderAll(options = {}) {
-      const animate = options.animate === true;
-      const result = document.getElementById('dc_result');
-      if (!result) return;
-      const stateKey = renderStateKey();
-
-      if (_isSingleMode) {
-        const cards = `<div style="width:100%;margin:0 0 20px;">${renderCard(_stA, 'a', _labelA)}</div>`;
-        const tbl = renderSingleTable(_stA);
-        const html = cards + tbl;
-        const shouldUpdate = _renderMemo.key !== stateKey || _renderMemo.html !== html;
-        if (shouldUpdate) {
-          result.innerHTML = html;
-          _renderMemo = { key: stateKey, html };
-        }
-        if (shouldUpdate && animate) dcAnimateSections();
-        return;
-      }
-
-      const cards = `<div class="dc-compare-grid"><div style="min-width:0">${renderCard(_stA, 'a', _labelA)}</div><div style="min-width:0">${renderCard(_stB, 'b', _labelB)}</div></div>`;
-      const qfBar = renderQFBarModern();
-      let tbl = '';
-      if (_viewMode === 'unmatched_a') tbl = renderUnmatchedTable(_stA, _stB, 'a');
-      else if (_viewMode === 'unmatched_b') tbl = renderUnmatchedTable(_stA, _stB, 'b');
-      else tbl = renderAnomalyTable(_stA, _stB);
-      const html = cards + qfBar + tbl;
-      const shouldUpdate = _renderMemo.key !== stateKey || _renderMemo.html !== html;
-      if (shouldUpdate) {
-        result.innerHTML = html;
-        _renderMemo = { key: stateKey, html };
-        bindQFEvents();
-      }
-      if (shouldUpdate && animate) dcAnimateSections();
-    }
+    // CLEANUP NOTE: Legacy renderers have been removed.
+    // The active UI is defined in the "ACTIVE QA RENDER OVERRIDES" block near
+    // the bottom of buildDailyCompare(). Only shared helpers remain here.
 
     function dcAnimateSections() {
       document.querySelectorAll('.master-section').forEach((el, i) => {
@@ -4588,230 +4440,9 @@ function buildDailyCompare(data) {
     }
 
     function renderSingleTable(stA) {
-      if (!stA || !stA.routes || stA.routes.length === 0) {
-        return `<div class="dc-card dc-empty"><div class="dc-empty-msg">ไม่มีข้อมูลสำหรับช่วงเวลาที่เลือก</div></div>`;
-      }
-
-      const routes = [...stA.routes].sort((a, b) => {
-        const ca = String(a.customer || '').trim().toUpperCase();
-        const cb = String(b.customer || '').trim().toUpperCase();
-        const pa = custOrder[ca] ?? 999;
-        const pb = custOrder[cb] ?? 999;
-        if (pa !== pb) return pa - pb;
-        return b.margin - a.margin;
-      });
-
-      const getAnomalies = (r) => {
-        const causes = [];
-        const mg = r.margin || 0;
-        if (mg < 0) { const lp = r.recv > 0 ? Math.abs(mg / r.recv * 100) : 0; causes.push({ text: `ขาดทุน ${lp.toFixed(0)}%`, color: 'red' }); }
-        if ((r.oil || 0) > (r.pay || 0) * 0.5 && (r.pay || 0) > 0) causes.push({ text: 'สำรองน้ำมัน>50%', color: 'orange' });
-
-        const rTrips = (stA.rows || []).filter(tr => tr.route === r.route && tr.customer === r.customer && tr.vtype === r.vtype);
-        if (rTrips.length > 1) {
-          const aPay = rTrips.reduce((s, tr) => s + (tr.pay || 0), 0) / rTrips.length;
-          const aOil = rTrips.reduce((s, tr) => s + (tr.oil || 0), 0) / rTrips.length;
-          const aRecv = rTrips.reduce((s, tr) => s + (tr.recv || 0), 0) / rTrips.length;
-
-          let hPay = false, hOil = false, lRecv = false;
-          rTrips.forEach(tr => {
-            if (aPay > 0 && (tr.pay || 0) > aPay * 1.05) hPay = true;
-            if (aOil > 0 && (tr.oil || 0) > aOil * 1.10) hOil = true;
-            if (aRecv > 0 && (tr.recv || 0) < aRecv * 0.95) lRecv = true;
-          });
-
-          if (hPay) causes.push({ text: 'ราคาจ่ายแพงกว่าค่าเฉลี่ย', color: 'purple' });
-          if (hOil) causes.push({ text: 'สำรองน้ำมันแพงกว่าค่าเฉลี่ย', color: 'orange' });
-          if (lRecv) causes.push({ text: 'ราคารับต่ำกว่าค่าเฉลี่ย', color: 'blue' });
-        }
-
-        const priority = { red: 1, orange: 2, purple: 3, blue: 4 };
-        causes.sort((a, b) => priority[a.color] - priority[b.color]);
-        return causes;
-      };
-
-      const grouped = {};
-      routes.forEach(r => {
-        const c = r.customer || '-';
-        if (!grouped[c]) grouped[c] = [];
-        grouped[c].push(r);
-      });
-
-      const custColors = {
-        'FLASH': '#3b82f6',
-        'BEST EXPRESS': '#8b5cf6',
-        'BEST': '#8b5cf6',
-        'J&T': '#f59e0b',
-        'KEX': '#10b981',
-        'SGT': '#ec4899',
-        'SPX-FSOC': '#06b6d4',
-        'SPX': '#06b6d4'
-      };
-
-      let totalAnomalies = 0;
-      const cardsHtml = Object.entries(grouped).map(([cust, custRoutes], cIdx) => {
-        const cTrips = custRoutes.reduce((s, r) => s + (r.trips || 0), 0);
-        const cRecv = custRoutes.reduce((s, r) => s + (r.recv || 0), 0);
-        const cPay = custRoutes.reduce((s, r) => s + (r.pay || 0), 0);
-        const cOil = custRoutes.reduce((s, r) => s + (r.oil || 0), 0);
-        const cMargin = custRoutes.reduce((s, r) => s + (r.margin || 0), 0);
-        const cPct = cRecv > 0 ? (cMargin / cRecv * 100) : 0;
-
-        const anomCount = custRoutes.filter(r => getAnomalies(r).length > 0).length;
-        totalAnomalies += anomCount;
-
-        const cColor = custColors[cust.trim().toUpperCase()] || 'var(--accent)';
-        const mgCls = cMargin >= 0 ? 'green' : 'red';
-
-        const colorMap = { red: '#ef4444', orange: '#f97316', purple: '#a855f7', blue: '#3b82f6' };
-
-        let mappedRoutes = custRoutes.map(r => ({ r, anoms: getAnomalies(r) }));
-        mappedRoutes.sort((a, b) => {
-          if (a.anoms.length > 0 && b.anoms.length === 0) return -1;
-          if (a.anoms.length === 0 && b.anoms.length > 0) return 1;
-          return b.r.margin - a.r.margin;
-        });
-
-        const uniqueStatuses = new Set();
-        mappedRoutes.forEach(({ anoms }) => {
-          if (anoms.length === 0) uniqueStatuses.add('ปกติ');
-          else anoms.forEach(a => uniqueStatuses.add(a.text.includes('ขาดทุน') ? 'ขาดทุน' : a.text));
-        });
-
-        // Compute option counts for this customer card
-        const getStatusColor = (s) => {
-          if (s.includes('ขาดทุน')) return 'red';
-          if (s.includes('สำรอง') || s.includes('น้ำมัน') || s.includes('ขั้นต่ำ')) return 'orange';
-          if (s.includes('ราคาจ่าย') || s.includes('จ่ายแพง')) return 'purple';
-          if (s.includes('ราคารับ') || s.includes('ราคาบิ๊ก')) return 'blue';
-          if (s.includes('ปกติ')) return 'green';
-          return 'slate';
-        };
-
-        const filterOpts = Array.from(uniqueStatuses).map(s => {
-          const count = mappedRoutes.filter(({ anoms }) => {
-            if (s === 'ปกติ') return anoms.length === 0;
-            return anoms.some(a => (a.text.includes('ขาดทุน') ? 'ขาดทุน' : a.text) === s);
-          }).length;
-          return `
-            <div class="sf-toggle on" data-color="${getStatusColor(s)}" onclick="window.sfToggleClick(this, '${cIdx}')">
-              <input type="checkbox" value="${esc(s)}" class="filter-cb-${cIdx}" checked style="display:none">
-              <span class="sf-switch"></span>
-              <span class="sf-label">${esc(s)}</span>
-              <span class="sf-count">${count}</span>
-            </div>
-          `;
-        }).join('');
-
-        const filterAllHtml = `
-          <div class="sf-all-btn active" onclick="window.sfToggleAllClick(this, '${cIdx}')">
-            <input type="checkbox" id="filter-cb-all-${cIdx}" checked style="display:none">
-            ดูทั้งหมด
-          </div>
-        `;
-
-        const routeRows = mappedRoutes.map(({ r, anoms }) => {
-          const isNormal = anoms.length === 0;
-          const statusList = isNormal ? 'ปกติ' : anoms.map(a => a.text.includes('ขาดทุน') ? 'ขาดทุน' : a.text).join(',');
-
-          const anomHtml = isNormal
-            ? `<span style="display:inline-block;padding:3px 8px;border-radius:6px;background:rgba(16,185,129,.15);color:#10b981;font-size:10px;font-weight:400">ปกติ</span>`
-            : `<div class="dc-tags-wrap-sm">${anoms.map(a => `<span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:400;background:${colorMap[a.color]};color:#fff;white-space:nowrap">${a.text}</span>`).join('')}</div>`;
-
-          const mgClr = r.margin >= 0 ? '#10b981' : '#ef4444';
-          const bgHighlight = isNormal ? 'rgba(16, 185, 129, 0.05)' : 'transparent';
-
-          return `<tr class="route-row-cust-${cIdx}" data-status="${esc(statusList)}" style="background:${bgHighlight};border-bottom:1px solid rgba(255,255,255,.04);cursor:pointer;transition:all .15s" onmouseover="this.style.background='rgba(59,130,246,.06)'" onmouseout="this.style.background='${bgHighlight}'" onclick="dcOpenRouteModal('${stA.dateStart}','${stA.dateEnd}','${esc(r.route)}','${esc(r.customer)}','${esc(r.vtype)}')">
-            <td style="padding:10px 12px;font-size:12px;font-weight:400;color:var(--text);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.route)}">${esc(r.route)}</td>
-            <td style="padding:10px 12px;text-align:center;font-size:12px;font-weight:400;color:var(--muted)">${esc(r.vtype || '-')}</td>
-            <td style="padding:10px 12px;text-align:center;font-size:12px;font-weight:400">${fmt(r.trips)}</td>
-            <td style="padding:10px 12px;text-align:right;font-size:12px;font-weight:400">${fmt(r.recv)}</td>
-            <td style="padding:10px 12px;text-align:right;font-size:12px;font-weight:400">${fmt(r.pay)}</td>
-            <td style="padding:10px 12px;text-align:right;font-size:12px;font-weight:400;color:var(--orange)">${fmt(r.oil)}</td>
-            <td style="padding:10px 12px;text-align:right;font-size:12px;font-weight:400;color:${mgClr}">${fmt(r.margin)}</td>
-            <td style="padding:10px 12px;text-align:right;font-size:12px;font-weight:400;color:${mgClr}">${fmtP(r.pct)}</td>
-            <td style="padding:10px 12px;min-width:140px">${anomHtml}</td>
-          </tr>`;
-        }).join('');
-
-        return `<div style="background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:20px;box-shadow:0 4px 24px rgba(0,0,0,.18)">
-          <div style="padding:18px 20px;background:linear-gradient(135deg,${cColor}12,transparent);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px">
-            <div style="display:flex;align-items:center;gap:12px">
-              <div style="width:12px;height:12px;border-radius:50%;background:${cColor};box-shadow:0 0 10px ${cColor}50"></div>
-              <div>
-                <div style="font-size:16px;font-weight:800;color:var(--text);letter-spacing:.3px">${esc(cust)}</div>
-                <div style="font-size:11px;color:var(--muted);margin-top:3px">${custRoutes.length} เส้นทาง · ${cTrips} เที่ยว</div>
-              </div>
-            </div>
-            <div style="display:flex;gap:20px;align-items:center">
-              <div style="text-align:right">
-                <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">ส่วนต่างรวม</div>
-                <div style="font-size:18px;font-weight:800;color:var(--${mgCls});margin-top:2px">${fmt(cMargin)}</div>
-              </div>
-              <div style="text-align:right">
-                <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">กำไร %</div>
-                <div style="font-size:18px;font-weight:800;color:var(--${mgCls});margin-top:2px">${cPct.toFixed(1)}%</div>
-              </div>
-              ${anomCount > 0 ? `<div style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.25);border-radius:10px;padding:5px 12px;display:flex;align-items:center;gap:6px">
-                <span style="width:7px;height:7px;border-radius:50%;background:#ef4444"></span>
-                <span style="font-size:12px;font-weight:700;color:#ef4444">${anomCount} ความผิดปกติ</span>
-              </div>` : ''}
-            </div>
-          </div>
-          <div style="padding:12px 20px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;gap:28px;flex-wrap:wrap;align-items:center">
-            <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600">ราคารับรวม</div><div style="font-size:13px;font-weight:700;color:var(--text);margin-top:3px">${fmt(cRecv)}</div></div>
-            <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600">ราคาจ่ายรวม</div><div style="font-size:13px;font-weight:700;color:var(--text);margin-top:3px">${fmt(cPay)}</div></div>
-            <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600">สำรองน้ำมัน</div><div style="font-size:13px;font-weight:700;color:var(--orange);margin-top:3px">${fmt(cOil)}</div></div>
-            
-            <div style="margin-left:auto">
-              <div class="sf-bar">
-                ${filterAllHtml}
-                <div class="sf-sep"></div>
-                ${filterOpts}
-              </div>
-            </div>
-          </div>
-          <div style="overflow-x:auto">
-            <table style="width:100%;border-collapse:collapse;font-size:12px">
-              <thead>
-                <tr style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px;background:var(--surface)">
-                  <th style="padding:10px 12px;text-align:left;font-weight:700;border-bottom:1px solid var(--border)">เส้นทาง</th>
-                  <th style="padding:10px 12px;text-align:center;font-weight:700;border-bottom:1px solid var(--border)">ประเภทรถ</th>
-                  <th style="padding:10px 12px;text-align:center;font-weight:700;border-bottom:1px solid var(--border)">เที่ยว</th>
-                  <th style="padding:10px 12px;text-align:right;font-weight:700;border-bottom:1px solid var(--border)">ราคารับ</th>
-                  <th style="padding:10px 12px;text-align:right;font-weight:700;border-bottom:1px solid var(--border)">ราคาจ่าย</th>
-                  <th style="padding:10px 12px;text-align:right;font-weight:700;border-bottom:1px solid var(--border)">สำรองน้ำมัน</th>
-                  <th style="padding:10px 12px;text-align:right;font-weight:700;border-bottom:1px solid var(--border)">ส่วนต่าง</th>
-                  <th style="padding:10px 12px;text-align:right;font-weight:700;border-bottom:1px solid var(--border)">กำไร %</th>
-                  <th style="padding:10px 12px;text-align:left;font-weight:700;border-bottom:1px solid var(--border);min-width:140px">สถานะ</th>
-                </tr>
-              </thead>
-              <tbody>${routeRows}</tbody>
-            </table>
-          </div>
-        </div>`;
-      }).join('');
-
-      return `<div style="margin-top:24px">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
-          <div style="display:flex;align-items:center;gap:10px">
-            <div style="width:3px;height:20px;background:var(--accent);border-radius:2px;flex-shrink:0"></div>
-            <span style="font-size:13px;font-weight:500;color:var(--text);letter-spacing:.2px">รายงานวิเคราะห์เส้นทางประจำวัน</span>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center">
-            ${totalAnomalies > 0 ? `<div style="display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:6px;border:1px solid rgba(239,68,68,.2);background:rgba(239,68,68,.06)">
-              <span style="width:5px;height:5px;border-radius:50%;background:#ef4444;flex-shrink:0"></span>
-              <span style="font-size:11px;font-weight:400;color:#f87171;letter-spacing:.1px">พบ ${totalAnomalies} รายการผิดปกติ</span>
-            </div>` : ''}
-            <div style="display:flex;align-items:center;gap:10px;padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:var(--surface)">
-              <span style="font-size:11px;font-weight:400;color:var(--muted)">${routes.length} เส้นทาง</span>
-              <span style="width:1px;height:10px;background:var(--border)"></span>
-              <span style="font-size:11px;font-weight:400;color:var(--muted)">${stA.trips || 0} เที่ยว</span>
-            </div>
-          </div>
-        </div>
-        ${cardsHtml}
-      </div>`;
+      // Stub: legacy implementation removed. Active implementation lives in
+      // ACTIVE QA RENDER OVERRIDES block below.
+      return '';
     }
 
     window.toggleCustFilterAll = function (cIdx, isChecked) {
@@ -5172,662 +4803,14 @@ function buildDailyCompare(data) {
       </div>`;
     }
 
-    function renderAnomalyTable(stA, stB) {
-      if (!stA) return '<div style="padding:40px;text-align:center;color:var(--muted)">กรุณาเลือกช่วงเวลาหลัก</div>';
-      if (!_isSingleMode && (!stB || !stB.rows || stB.rows.length === 0)) {
-        return '<div style="padding:40px;text-align:center;color:var(--muted)">ช่วงเวลาเปรียบเทียบไม่มีข้อมูล กรุณาเลือกวันที่ใหม่ หรือสลับเป็นมุมมองปกติ</div>';
-      }
-      const isValidDriver = d => d && d.trim() !== '-' && !/^null$/i.test(d.trim()) && !/^nan$/i.test(d.trim());
-      const rowsA = (stA.rows || []).filter(r => isValidDriver(r.driver));
-      const rowsB = (stB?.rows || []).filter(r => isValidDriver(r.driver));
-      const colorMap = { red: '#ef4444', orange: '#f97316', purple: '#a855f7', blue: '#3b82f6', green: '#10b981' };
-      const badge = (msg, lvl) => `<span style="display:inline-block;margin:1px 2px 1px 0;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:400;background:${colorMap[lvl] || 'var(--' + lvl + ')'};color:#fff;white-space:nowrap">${msg}</span>`;
-      const thA = (t, al = 'right') => `<th style="padding:5px 9px;text-align:${al};font-size:10px;font-weight:700;color:#7dd3c7;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;background:rgba(20,184,166,.16);border-bottom:1px solid var(--border)">${t}</th>`;
-      const thB = (t, al = 'right') => `<th style="padding:5px 9px;text-align:${al};font-size:10px;font-weight:700;color:#b8bdfd;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;background:rgba(99,102,241,.18);border-bottom:1px solid var(--border)">${t}</th>`;
-      const thSep = `<th style="width:2px;padding:0;background:var(--border);border-bottom:1px solid var(--border)"></th>`;
-      const tdSep = `<td style="width:2px;padding:0;background:var(--border)"></td>`;
-      // Group by route key
-      const groupA = {}, groupB = {};
-      rowsA.forEach(r => {
-        const k = `${r.customer || ''}|${r.route || ''}|${r.vtype || ''}`;
-        if (!groupA[k]) groupA[k] = { customer: r.customer, route: r.route, vtype: r.vtype, trips: [] };
-        groupA[k].trips.push(r);
-      });
-      rowsB.forEach(r => {
-        const k = `${r.customer || ''}|${r.route || ''}|${r.vtype || ''}`;
-        if (!groupB[k]) groupB[k] = { trips: [] };
-        groupB[k].trips.push(r);
-      });
-      // INNER JOIN on Route Keys
-      const commonKeys = Object.keys(groupA).filter(k => groupB[k]);
-      let totalRows = 0;
-      let cardsData = [];
-
-      commonKeys.forEach(key => {
-        const ga = groupA[key], gb = groupB[key];
-        const tripsA = ga.trips, tripsB = gb.trips;
-
-        // Inner join by driver
-        const norm = d => d ? d.trim().toLowerCase() : '';
-        const usedB = new Set(), matched = [];
-        tripsA.forEach(ra => {
-          const idx = tripsB.findIndex((rb, i) => !usedB.has(i) && norm(rb.driver) === norm(ra.driver));
-          if (idx >= 0) { usedB.add(idx); matched.push({ ra, rb: tripsB[idx] }); }
-        });
-
-        // Skip route entirely if no matched drivers exist
-        if (matched.length === 0) return;
-
-        const anomRows = [];
-        matched.forEach(({ ra, rb }) => {
-          const shortD = d => {
-            if (!d) return '';
-            const p = d.split('-');
-            if (p.length === 3) {
-              const mNames = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-              return `${parseInt(p[2], 10)} ${mNames[parseInt(p[1], 10) - 1]} ${p[0].slice(-2)}`;
-            }
-            return d;
-          };
-          const dA = shortD(ra.date);
-          const dB = shortD(rb.date);
-
-          const flags = [];
-          const flagItems = [];
-          const statuses = new Set();
-          if ((ra.margin || 0) < 0) {
-            const lp = ra.recv > 0 ? Math.abs((ra.margin || 0) / ra.recv * 100) : 0;
-            flagItems.push({ kind: 'loss', html: badge(`${dA} ขาดทุน ${lp.toFixed(0)}%`, 'red') });
-            statuses.add('loss');
-          }
-          if ((rb.margin || 0) < 0) {
-            const lp = rb.recv > 0 ? Math.abs((rb.margin || 0) / rb.recv * 100) : 0;
-            flagItems.push({ kind: 'loss', html: badge(`${dB} ขาดทุน ${lp.toFixed(0)}%`, 'red') });
-            statuses.add('loss');
-          }
-
-          if ((ra.oil || 0) > (ra.pay || 0) * 0.5 && (ra.pay || 0) > 0) {
-            flagItems.push({ kind: 'oil50', html: badge(`${dA} สำรองน้ำมัน>50%`, 'orange') });
-            statuses.add('oil50');
-          }
-          if ((rb.oil || 0) > (rb.pay || 0) * 0.5 && (rb.pay || 0) > 0) {
-            flagItems.push({ kind: 'oil50', html: badge(`${dB} สำรองน้ำมัน>50%`, 'orange') });
-            statuses.add('oil50');
-          }
-
-          if (rb.pay > 0 && (ra.pay || 0) > rb.pay * 1.05) {
-            flagItems.push({ kind: 'payHigh', html: badge(`${dA} ราคาจ่ายแพงกว่าเดิม`, 'purple') });
-            statuses.add('payHigh');
-          }
-          if (rb.oil > 0 && (ra.oil || 0) > rb.oil * 1.05) {
-            flagItems.push({ kind: 'oilHigh', html: badge(`${dA} สำรองน้ำมันแพงกว่าเดิม`, 'orange') });
-            statuses.add('oilHigh');
-          }
-          const oilPriceA = getOilPriceByDate(ra?.date);
-          const oilPriceB = getOilPriceByDate(rb?.date);
-          if (hasNum(oilPriceA) && hasNum(oilPriceB) && Math.abs((oilPriceA || 0) - (oilPriceB || 0)) < 0.0001 &&
-            hasNum(ra.recv) && hasNum(rb.recv) && Math.abs((ra.recv || 0) - (rb.recv || 0)) >= 0.0001) {
-            flagItems.push({ kind: 'recvLow', html: badge(`${dA} ราคารับผิดปกติ`, 'blue') });
-            statuses.add('recvLow');
-          }
-
-          if (flagItems.length === 0) {
-            flags.push(`<span style="display:inline-block;padding:3px 8px;border-radius:6px;background:rgba(16,185,129,.15);color:#10b981;font-size:10px;font-weight:400">ปกติ</span>`);
-            statuses.add('normal');
-          } else {
-            // Keep "ขาดทุน ...%" at the end to improve scan order in UI.
-            flagItems.sort((a, b) => (a.kind === 'loss') - (b.kind === 'loss'));
-            flagItems.forEach(item => flags.push(item.html));
-          }
-          anomRows.push({ ra, rb, flags, statuses: Array.from(statuses) });
-        });
-
-        const anomCount = anomRows.filter(r => r.flags.some(f => !f.includes('ปกติ'))).length;
-        totalRows += anomRows.length;
-
-        // Sort rows within route: Anomalies first, Normal last
-        anomRows.sort((a, b) => {
-          const aNorm = a.flags.every(f => f.includes('ปกติ'));
-          const bNorm = b.flags.every(f => f.includes('ปกติ'));
-          if (aNorm && !bNorm) return 1;
-          if (!aNorm && bNorm) return -1;
-          return 0;
-        });
-
-        let severity = 0; // All normal
-        if (anomCount > 0 && anomCount < anomRows.length) severity = 1; // Mixed
-        else if (anomCount === anomRows.length) severity = 2; // All anomalous
-
-        const cardStatuses = new Set();
-        anomRows.forEach(r => (r.statuses || []).forEach(s => cardStatuses.add(s)));
-        cardsData.push({ key, ga, anomRows, severity, statuses: [...cardStatuses] });
-      });
-
-      window._anomalyCardsData = cardsData;
-
-      // Sort cards: Severity 2 (Top) -> 1 (Middle) -> 0 (Bottom) -> Customer order -> alphabetically
-      cardsData.sort((a, b) => {
-        if (b.severity !== a.severity) return b.severity - a.severity;
-        const ca = String(a.ga.customer || '').trim().toUpperCase();
-        const cb = String(b.ga.customer || '').trim().toUpperCase();
-        const pa = custOrder[ca] ?? 999;
-        const pb = custOrder[cb] ?? 999;
-        if (pa !== pb) return pa - pb;
-        return a.key.localeCompare(b.key);
-      });
-
-      const anomalyOptionKeys = ['loss', 'oil50', 'payHigh', 'oilHigh', 'recvLow', 'normal'];
-      const selectedAnomalyStatuses = getSelectedCompareStatuses('anomaly', anomalyOptionKeys);
-      const selectedAnomalySet = new Set(selectedAnomalyStatuses);
-      const visibleAnomalyCards = cardsData.filter(card => (card.statuses || []).some(s => selectedAnomalySet.has(s)));
-      const visibleAnomalyCount = visibleAnomalyCards.reduce((sum, card) => {
-        const rows = card.anomRows || [];
-        return sum + rows.filter(r => (r.flags || []).some(f => !String(f).includes('ปกติ'))).length;
-      }, 0);
-      window._anomalyCardsData = cardsData;
-      let html = '';
-      cardsData.forEach((card, cIdx) => {
-        const { ga, anomRows } = card;
-        const cardStatuses = card.statuses || [];
-        const isVisible = cardStatuses.some(s => selectedAnomalySet.has(s));
-        const displayStyle = isVisible ? '' : 'display:none;';
-        const cardAnomCount = anomRows.filter(r => (r.flags || []).some(f => !String(f).includes('ปกติ'))).length;
-
-        // Sum only the perfectly matched drivers for apples-to-apples comparison
-        const mTripsA = anomRows.map(r => r.ra);
-        const mTripsB = anomRows.map(r => r.rb);
-        const aSum = mTripsA.reduce((s, r) => ({ recv: s.recv + (r.recv || 0), pay: s.pay + (r.pay || 0), oil: s.oil + (r.oil || 0), margin: s.margin + (r.margin || 0) }), { recv: 0, pay: 0, oil: 0, margin: 0 });
-        const bSum = mTripsB.reduce((s, r) => ({ recv: s.recv + (r.recv || 0), pay: s.pay + (r.pay || 0), oil: s.oil + (r.oil || 0), margin: s.margin + (r.margin || 0) }), { recv: 0, pay: 0, oil: 0, margin: 0 });
-
-        let tripRows = '';
-        anomRows.forEach(({ ra, rb, flags }, i) => {
-          const isNormal = flags.length === 1 && flags[0].includes('ปกติ');
-          const bgHighlight = isNormal ? 'rgba(16, 185, 129, 0.05)' : 'transparent';
-          const bg = isNormal ? `background:${bgHighlight}` : (i % 2 ? 'background:rgba(255,255,255,.02)' : '');
-          const aMClr = ra && (ra.margin || 0) >= 0 ? 'var(--green)' : 'var(--red)';
-          const bMClr = rb && (rb.margin || 0) >= 0 ? 'var(--green)' : 'var(--red)';
-          const aOilPct = ra && ra.pay > 0 ? (ra.oil || 0) / ra.pay * 100 : 0, aOilWarn = aOilPct > 50;
-          const aOilCell = ra && ra.oil > 0 ? `<span style="${aOilWarn ? 'color:var(--orange)' : ''}">${fmt(ra.oil)}${aOilWarn ? ` <span style="font-size:9px;font-weight:400;background:var(--orange);color:#fff;padding:1px 4px;border-radius:3px">${aOilPct.toFixed(0)}%</span>` : ''}</span>` : `<span style="color:var(--muted)">-</span>`;
-          const aFuelPrice = getOilPriceByDate(ra?.date);
-          const bOilPct = rb && rb.pay > 0 ? (rb.oil || 0) / rb.pay * 100 : 0, bOilWarn = bOilPct > 50;
-          const bOilCell = rb && rb.oil > 0 ? `<span style="${bOilWarn ? 'color:var(--orange)' : ''}">${fmt(rb.oil)}${bOilWarn ? ` <span style="font-size:9px;font-weight:400;background:var(--orange);color:#fff;padding:1px 4px;border-radius:3px">${bOilPct.toFixed(0)}%</span>` : ''}</span>` : `<span style="color:var(--muted)">-</span>`;
-          const bFuelPrice = getOilPriceByDate(rb?.date);
-
-          tripRows += `<tr style="${bg};transition:background .15s" onmouseover="this.style.background='rgba(59,130,246,.06)'" onmouseout="this.style.background='${bgHighlight}'">
-            <td style="padding:6px 9px;font-weight:400;color:${ra ? 'var(--text)' : 'var(--muted)'}">${ra ? esc(ra.driver || '-') : `<span style="font-size:10px">ไม่มีข้อมูลช่วง ${esc(_labelA || 'หลัก')}</span>`}</td>
-            <td style="padding:6px 9px;text-align:right;color:var(--blue)">${hasNum(aFuelPrice) ? fmt(aFuelPrice) : '<span style="color:var(--muted)">-</span>'}</td>
-            <td style="padding:6px 9px">${aOilCell}</td>
-            <td style="padding:6px 9px;text-align:right">${ra ? fmt(ra.recv) : '<span style="color:var(--muted)">-</span>'}</td>
-            <td style="padding:6px 9px;text-align:right">${ra && hasNum(ra.pay) ? fmt(ra.pay) : '<span style="color:var(--muted)">-</span>'}</td>
-            <td style="padding:6px 9px;text-align:right;font-weight:400;color:${aMClr}">${ra ? fmt(ra.margin) : '<span style="color:var(--muted)">-</span>'}</td>
-            ${tdSep}
-            <td style="padding:6px 9px;font-weight:400;color:${rb ? 'var(--text)' : 'var(--muted)'}">${rb ? esc(rb.driver || '-') : `<span style="font-size:10px">ไม่มีข้อมูลช่วง ${esc(_labelB || 'เปรียบเทียบ')}</span>`}</td>
-            <td style="padding:6px 9px;text-align:right;color:var(--blue)">${hasNum(bFuelPrice) ? fmt(bFuelPrice) : '<span style="color:var(--muted)">-</span>'}</td>
-            <td style="padding:6px 9px">${bOilCell}</td>
-            <td style="padding:6px 9px;text-align:right">${rb ? fmt(rb.recv) : '<span style="color:var(--muted)">-</span>'}</td>
-            <td style="padding:6px 9px;text-align:right">${rb && hasNum(rb.pay) ? fmt(rb.pay) : '<span style="color:var(--muted)">-</span>'}</td>
-            <td style="padding:6px 9px;text-align:right;font-weight:400;color:${bMClr}">${rb ? fmt(rb.margin) : '<span style="color:var(--muted)">-</span>'}</td>
-            <td style="padding:6px 9px 6px 14px;border-left:1px solid var(--border)">${flags.join('')}</td>
-          </tr>`;
-        });
-
-        const sumRow = `<tr style="border-top:2px solid var(--border);background:rgba(255,255,255,.025)">
-          <td style="padding:8px 9px;font-weight:400;font-size:12px;color:#7dd3c7">รวม ${mTripsA.length} เที่ยว</td>
-          <td style="padding:8px 9px;text-align:right;font-weight:400;font-size:12px;color:var(--muted)">-</td>
-          <td style="padding:8px 9px;font-weight:400;font-size:12px;color:var(--orange)">${fmt(aSum.oil)}</td>
-          <td style="padding:8px 9px;text-align:right;font-weight:400;font-size:12px">${fmt(aSum.recv)}</td>
-          <td style="padding:8px 9px;text-align:right;font-weight:400;font-size:12px">${hasNum(aSum.pay) ? fmt(aSum.pay) : '-'}</td>
-          <td style="padding:8px 9px;text-align:right;font-weight:400;font-size:12px;color:${aSum.margin >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(aSum.margin)}</td>
-          ${tdSep}
-          <td style="padding:8px 9px;font-weight:400;font-size:12px;color:#b8bdfd">รวม ${mTripsB.length} เที่ยว</td>
-          <td style="padding:8px 9px;text-align:right;font-weight:400;font-size:12px;color:var(--muted)">-</td>
-          <td style="padding:8px 9px;font-weight:400;font-size:12px;color:var(--orange)">${fmt(bSum.oil)}</td>
-          <td style="padding:8px 9px;text-align:right;font-weight:400;font-size:12px">${fmt(bSum.recv)}</td>
-          <td style="padding:8px 9px;text-align:right;font-weight:400;font-size:12px">${hasNum(bSum.pay) ? fmt(bSum.pay) : '-'}</td>
-          <td style="padding:8px 9px;text-align:right;font-weight:400;font-size:12px;color:${bSum.margin >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(bSum.margin)}</td>
-          <td style="padding:8px 9px;border-left:1px solid var(--border);background:transparent">&nbsp;</td>
-        </tr>`;
-
-        html += `<div class="dc-status-card dc-status-card-anomaly" data-status-keys="${esc((card.statuses || []).join(','))}" data-anom-count="${cardAnomCount}" style="${displayStyle}background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:16px;overflow:hidden;cursor:pointer;transition:border-color .2s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'" onclick="dcOpenAnomalyModal(${cIdx})">
-          <div style="background:var(--surface);padding:10px 14px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;align-items:center;gap:12px">
-            <div style="flex:1;min-width:240px">
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
-                <span style="font-size:10px;font-weight:400;letter-spacing:.6px;text-transform:uppercase;color:#9ca3af;background:rgba(148,163,184,.10);border:1px solid rgba(148,163,184,.22);border-radius:999px;padding:2px 9px">${esc(ga.customer || '-')} · ${esc(ga.vtype || '-')}</span>
-              </div>
-              <div style="font-size:14px;font-weight:600;color:#7aa2ff;line-height:1.35;letter-spacing:.2px;word-break:break-word">${esc(ga.route || '-')}</div>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              <span style="font-size:11px;font-weight:400;background:rgba(20,184,166,.22);color:#7dd3c7;padding:2px 8px;border-radius:6px">${esc(_labelA)}: <span style="color:var(--text);font-weight:400">${mTripsA.length} เที่ยว</span></span>
-              <span style="font-size:11px;font-weight:400;background:rgba(99,102,241,.22);color:#b8bdfd;padding:2px 8px;border-radius:6px">${esc(_labelB)}: <span style="color:var(--text);font-weight:400">${mTripsB.length} เที่ยว</span></span>
-            </div>
-          </div>
-          <div style="overflow-x:auto">
-            <table style="width:100%;min-width:max-content;border-collapse:collapse;font-size:12px;table-layout:auto;white-space:nowrap">
-              <colgroup><col style="min-width:110px"><col style="width:90px"><col style="width:90px"><col style="width:85px"><col style="width:85px"><col style="width:85px"><col style="width:2px"><col style="min-width:110px"><col style="width:90px"><col style="width:90px"><col style="width:85px"><col style="width:85px"><col style="width:85px"><col style="min-width:230px"></colgroup>
-              <thead>
-                <tr>
-                  <th colspan="6" style="padding:5px 9px;text-align:left;font-size:11px;font-weight:700;color:#7dd3c7;background:rgba(20,184,166,.16);border-bottom:1px solid var(--border)">${esc(_labelA)}</th>
-                  ${thSep}
-                  <th colspan="6" style="padding:5px 9px;text-align:left;font-size:11px;font-weight:700;color:#b8bdfd;background:rgba(99,102,241,.18);border-bottom:1px solid var(--border)">${esc(_labelB)}</th>
-                  <th style="padding:5px 9px;background:rgba(236,72,153,.16);border-bottom:1px solid var(--border);border-left:1px solid var(--border)"></th>
-                </tr>
-                <tr>
-                  ${thA('พขร.', 'left')}${thA('ราคาน้ำมัน')}${thA('สำรองน้ำมัน', 'left')}${thA('ราคารับ')}${thA('ราคาจ่าย')}${thA('ส่วนต่าง')}
-                  ${thSep}
-                  ${thB('พขร.', 'left')}${thB('ราคาน้ำมัน')}${thB('สำรองน้ำมัน', 'left')}${thB('ราคารับ')}${thB('ราคาจ่าย')}${thB('ส่วนต่าง')}
-                  <th style="padding:5px 9px 5px 14px;font-size:10px;font-weight:700;color:#f3b2c9;opacity:0.95;text-transform:uppercase;letter-spacing:.4px;background:rgba(236,72,153,.16);border-bottom:1px solid var(--border);border-left:1px solid var(--border)">สาเหตุความผิดปกติ</th>
-                </tr>
-              </thead>
-              <tbody>${tripRows}${sumRow}</tbody>
-            </table>
-          </div>
-        </div>`;
-      });
-      if (!totalRows || cardsData.length === 0) return `<div class="table-card" style="margin-top:0"><div style="padding:48px;text-align:center;color:var(--green)">✅ ไม่พบความผิดปกติในช่วงเวลาที่เลือก</div></div>`;
-
-      const counts = {};
-      anomalyOptionKeys.forEach(k => {
-        counts[k] = cardsData.filter(card => card.statuses.includes(k)).length;
-      });
-
-      return `<div style="margin-top:0">
-        <section class="dc-summary-head">
-          <div class="dc-summary-copy">
-            <h3 class="dc-summary-title">สรุปผลการตรวจสอบรวม <span id="dc-summary-routes-anomaly">${visibleAnomalyCards.length}</span> เส้นทาง</h3>
-            <p class="dc-summary-sub">พบความผิดปกติ <span id="dc-summary-anoms-anomaly">${visibleAnomalyCount}</span> รายการ จากข้อมูลเปรียบเทียบทั้งสองช่วงเวลา</p>
-          </div>
-          <div class="dc-summary-filter">
-            ${renderCompareStatusFilter('anomaly', anomalyOptionKeys, selectedAnomalyStatuses, counts)}
-          </div>
-        </section>
-        ${html}
-      </div>`;
-    }
-
-    window.dcOpenAnomalyModal = function (idx) {
-      const card = window._anomalyCardsData[idx];
-      if (!card) return;
-      const existing = document.getElementById('dc_anom_modal');
-      if (existing) existing.remove();
-      const modal = document.createElement('div');
-      modal.id = 'dc_anom_modal';
-      modal.style = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)';
-      modal.onclick = e => { if (e.target === modal) modal.remove(); };
-
-      const thA = (t, al = 'right') => `<th style="padding:5px 4px;text-align:${al};font-size:10px;font-weight:700;color:#7dd3c7;background:rgba(20,184,166,.16);border-bottom:1px solid var(--border)">${t}</th>`;
-      const thB = (t, al = 'right') => `<th style="padding:5px 4px;text-align:${al};font-size:10px;font-weight:700;color:#b8bdfd;background:rgba(99,102,241,.18);border-bottom:1px solid var(--border)">${t}</th>`;
-      const thSep = `<th style="width:2px;padding:0;background:var(--border);border-bottom:1px solid var(--border)"></th>`;
-      const tdSep = `<td style="width:2px;padding:0;background:var(--border)"></td>`;
-
-      let trs = '';
-      card.anomRows.forEach(({ ra, rb, flags }, i) => {
-        const bg = i % 2 ? 'background:rgba(255,255,255,.02)' : '';
-        const aMClr = ra && (ra.margin || 0) >= 0 ? 'var(--green)' : 'var(--red)';
-        const bMClr = rb && (rb.margin || 0) >= 0 ? 'var(--green)' : 'var(--red)';
-
-        const rA = ra || {};
-        const rB = rb || {};
-        const pA = getOilPriceByDate(rA.date);
-        const pB = getOilPriceByDate(rB.date);
-
-        trs += `<tr style="${bg};border-bottom:1px solid rgba(255,255,255,.05)">
-          <td style="padding:6px 4px;white-space:nowrap">${esc(rA.date || '-')}</td>
-          <td style="padding:6px 4px;font-weight:600;min-width:90px">${esc(rA.driver || '-')}</td>
-          <td style="padding:6px 4px;color:var(--muted);white-space:nowrap">${esc(rA.vtype || '-')}</td>
-          <td style="padding:6px 4px;font-family:monospace;white-space:nowrap">${esc(rA.plate || '-')}</td>
-          <td style="padding:6px 4px;text-align:right;color:var(--blue)">${hasNum(pA) ? fmt(pA) : '-'}</td>
-          <td style="padding:6px 4px;text-align:right;color:var(--orange)">${hasNum(rA.oil) ? fmt(rA.oil) : '-'}</td>
-          <td style="padding:6px 4px;text-align:right">${hasNum(rA.recv) ? fmt(rA.recv) : '-'}</td>
-          <td style="padding:6px 4px;text-align:right">${hasNum(rA.pay) ? fmt(rA.pay) : '-'}</td>
-          <td style="padding:6px 4px;text-align:right;font-weight:700;color:${aMClr}">${hasNum(rA.margin) ? fmt(rA.margin) : '-'}</td>
-          ${tdSep}
-          <td style="padding:6px 4px;white-space:nowrap">${esc(rB.date || '-')}</td>
-          <td style="padding:6px 4px;font-weight:600;min-width:90px">${esc(rB.driver || '-')}</td>
-          <td style="padding:6px 4px;color:var(--muted);white-space:nowrap">${esc(rB.vtype || '-')}</td>
-          <td style="padding:6px 4px;font-family:monospace;white-space:nowrap">${esc(rB.plate || '-')}</td>
-          <td style="padding:6px 4px;text-align:right;color:var(--blue)">${hasNum(pB) ? fmt(pB) : '-'}</td>
-          <td style="padding:6px 4px;text-align:right;color:var(--orange)">${hasNum(rB.oil) ? fmt(rB.oil) : '-'}</td>
-          <td style="padding:6px 4px;text-align:right">${hasNum(rB.recv) ? fmt(rB.recv) : '-'}</td>
-          <td style="padding:6px 4px;text-align:right">${hasNum(rB.pay) ? fmt(rB.pay) : '-'}</td>
-          <td style="padding:6px 4px;text-align:right;font-weight:700;color:${bMClr}">${hasNum(rB.margin) ? fmt(rB.margin) : '-'}</td>
-          <td style="padding:6px 4px 6px 10px;border-left:1px solid var(--border)"><div class="dc-tags-wrap-xs">${flags.join('')}</div></td>
-        </tr>`;
-      });
-
-      const exportIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="16" height="16" fill="#5985E1" aria-hidden="true"><path d="M240-80q-33 0-56.5-23.5T160-160v-400q0-33 23.5-56.5T240-640h120v80H240v400h480v-400H600v-80h120q33 0 56.5 23.5T800-560v400q0 33-23.5 56.5T720-80H240Zm200-240v-447l-64 64-56-57 160-160 160 160-56 57-64-64v447h-80Z"/></svg>';
-      const exportBase = encodeURIComponent(`anomaly_${card.ga.route || 'route'}`);
-      modal.innerHTML = `
-        <div id="dc_anom_capture" data-export-root="1" style="background:var(--card);border:1px solid var(--border);border-radius:12px;max-width:98vw;width:100%;max-height:95vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.6)">
-          <div style="background:var(--surface);padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
-            <div style="min-width:0">
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                <div style="font-size:15px;font-weight:700;color:#f1f5f9">รายละเอียดการเปรียบเทียบ: <span style="color:#7aa2ff">${esc(card.ga.route || '-')}</span></div>
-                <button type="button" onclick="window.dcExportModalPng('dc_anom_capture', '${exportBase}')" title="Export PNG" aria-label="Export PNG"
-                  style="background:rgba(89,133,225,.10);border:1px solid rgba(89,133,225,.35);color:#dbeafe;width:28px;height:28px;border-radius:7px;cursor:pointer;line-height:1;display:inline-flex;align-items:center;justify-content:center;transition:all .2s;padding:0"
-                  onmouseover="this.style.background='rgba(89,133,225,.18)';this.style.borderColor='rgba(89,133,225,.55)'"
-                  onmouseout="this.style.background='rgba(89,133,225,.10)';this.style.borderColor='rgba(89,133,225,.35)'">${exportIcon}</button>
-              </div>
-              <div style="font-size:11px;color:var(--muted);margin-top:2px">ลูกค้า: ${esc(card.ga.customer || '-')} · พบข้อมูล ${card.anomRows.length} รายการ</div>
-            </div>
-            <button onclick="document.getElementById('dc_anom_modal').remove()"
-              style="background:rgba(255,255,255,.05);border:none;color:var(--muted);width:28px;height:28px;border-radius:6px;cursor:pointer;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;transition:all .2s"
-              onmouseover="this.style.background='rgba(255,255,255,.1)';this.style.color='var(--text)'"
-              onmouseout="this.style.background='rgba(255,255,255,.05)';this.style.color='var(--muted)'">&times;</button>
-          </div>
-          <div style="flex:1;overflow:auto;padding:0">
-            <table style="width:100%;min-width:max-content;border-collapse:collapse;font-size:11px">
-              <thead style="position:sticky;top:0;z-index:5;background:var(--surface)">
-                <tr>
-                  <th colspan="9" style="padding:6px 4px;text-align:center;font-size:11px;font-weight:800;color:#7dd3c7;background:rgba(20,184,166,.16);border-bottom:1px solid var(--border)">${_labelA}</th>
-                  ${thSep}
-                  <th colspan="9" style="padding:6px 4px;text-align:center;font-size:11px;font-weight:800;color:#b8bdfd;background:rgba(99,102,241,.18);border-bottom:1px solid var(--border)">${_labelB}</th>
-                  <th style="padding:6px 4px;background:rgba(236,72,153,.16);border-bottom:1px solid var(--border);border-left:1px solid var(--border)"></th>
-                </tr>
-                <tr>
-                  ${thA('วันที่', 'left')}${thA('พขร.', 'left')}${thA('รถ', 'left')}${thA('ทะเบียน', 'left')}${thA('ราคาน้ำมัน')}${thA('สำรองน้ำมัน')}${thA('รับ')}${thA('จ่าย')}${thA('ส่วนต่าง')}
-                  ${thSep}
-                  ${thB('วันที่', 'left')}${thB('พขร.', 'left')}${thB('รถ', 'left')}${thB('ทะเบียน', 'left')}${thB('ราคาน้ำมัน')}${thB('สำรองน้ำมัน')}${thB('รับ')}${thB('จ่าย')}${thB('ส่วนต่าง')}
-                  <th style="padding:5px 4px 5px 10px;font-size:10px;font-weight:700;color:#f3b2c9;opacity:0.95;background:rgba(236,72,153,.16);border-bottom:1px solid var(--border);border-left:1px solid var(--border)">ความผิดปกติ</th>
-                </tr>
-              </thead>
-              <tbody>${trs}</tbody>
-            </table>
-          </div>
-        </div>`;
-      document.body.appendChild(modal);
-    };
-
-    function renderUnmatchedTable(stA, stB, side) {
-      const isA = side === 'a';
-      const mySt = isA ? stA : stB;
-      const opSt = isA ? stB : stA;
-      const myLabel = isA ? _labelA : _labelB;
-
-      const themeColor = isA ? '#7dd3c7' : '#b8bdfd';
-      const themeBg = isA ? 'rgba(20,184,166,.16)' : 'rgba(99,102,241,.18)';
-      const themeBadgeBg = isA ? 'rgba(20,184,166,.22)' : 'rgba(99,102,241,.22)';
-      const themeHover = isA ? 'rgba(20,184,166,.14)' : 'rgba(99,102,241,.14)';
-
-      if (!mySt) return `<div style="padding:40px;text-align:center;color:var(--muted)">กรุณาเลือกช่วงเวลา</div>`;
-      const isValidDriver = d => d && d.trim() !== '-' && !/^null$/i.test(d.trim()) && !/^nan$/i.test(d.trim());
-
-      const myRows = (mySt.rows || []).filter(r => isValidDriver(r.driver));
-      const opRows = (opSt?.rows || []).filter(r => isValidDriver(r.driver));
-
-      const badge = (msg, lvl) => `<span style="display:inline-block;margin:1px 2px 1px 0;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:400;background:var(--${lvl});color:#fff;white-space:nowrap">${msg}</span>`;
-      const thMy = (t, al = 'right') => `<th style="padding:5px 9px;text-align:${al};font-size:10px;font-weight:700;color:${themeColor};text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;background:${themeBg};border-bottom:1px solid var(--border)">${t}</th>`;
-
-      const myGroup = {}, opGroup = {};
-      myRows.forEach(r => {
-        const k = `${r.customer || ''}|${r.route || ''}|${r.vtype || ''}`;
-        if (!myGroup[k]) myGroup[k] = { customer: r.customer, route: r.route, vtype: r.vtype, trips: [] };
-        myGroup[k].trips.push(r);
-      });
-      opRows.forEach(r => {
-        const k = `${r.customer || ''}|${r.route || ''}|${r.vtype || ''}`;
-        if (!opGroup[k]) opGroup[k] = { trips: [] };
-        opGroup[k].trips.push(r);
-      });
-
-      let totalRows = 0;
-      let cardsData = [];
-
-      Object.keys(myGroup).forEach(key => {
-        const ga = myGroup[key], gb = opGroup[key];
-        const myTrips = ga.trips, opTrips = gb ? gb.trips : [];
-
-        const norm = d => d ? d.trim().toLowerCase() : '';
-        const usedOp = new Set();
-
-        const unmatched = [];
-        myTrips.forEach(rmy => {
-          const idx = opTrips.findIndex((rop, i) => !usedOp.has(i) && norm(rop.driver) === norm(rmy.driver));
-          if (idx >= 0) {
-            usedOp.add(idx);
-          } else {
-            unmatched.push(rmy);
-          }
-        });
-
-        if (unmatched.length === 0) return;
-
-        const unRows = [];
-        unmatched.forEach(ra => {
-          const flags = [];
-          const statuses = new Set();
-          if ((ra.margin || 0) < 0) {
-            const lp = ra.recv > 0 ? Math.abs((ra.margin || 0) / ra.recv * 100) : 0;
-            flags.push(badge(`ขาดทุน ${lp.toFixed(0)}%`, 'red'));
-            statuses.add('loss');
-          }
-          if ((ra.oil || 0) > (ra.pay || 0) * 0.5 && (ra.pay || 0) > 0) {
-            flags.push(badge('สำรองน้ำมัน>50%', 'orange'));
-            statuses.add('oil50');
-          }
-
-          if (flags.length === 0) {
-            flags.push(`<span style="display:inline-block;padding:3px 8px;border-radius:6px;background:rgba(16,185,129,.15);color:#10b981;font-size:11px;font-weight:400">ปกติ</span>`);
-            statuses.add('normal');
-          }
-          unRows.push({ ra, flags, statuses: Array.from(statuses) });
-        });
-
-        const anomCount = unRows.filter(r => r.flags.some(f => !f.includes('ปกติ'))).length;
-        totalRows += unRows.length;
-
-        unRows.sort((a, b) => {
-          const aNorm = a.flags.every(f => f.includes('ปกติ'));
-          const bNorm = b.flags.every(f => f.includes('ปกติ'));
-          if (aNorm && !bNorm) return 1;
-          if (!aNorm && bNorm) return -1;
-          return 0;
-        });
-
-        let severity = 0;
-        if (anomCount > 0 && anomCount < unRows.length) severity = 1;
-        else if (anomCount === unRows.length) severity = 2;
-
-        const cardStatuses = new Set();
-        unRows.forEach(r => (r.statuses || []).forEach(s => cardStatuses.add(s)));
-        cardsData.push({ key, ga, unRows, severity, statuses: [...cardStatuses] });
-      });
-
-      window._unmatchedCardsData = cardsData;
-
-      cardsData.sort((a, b) => {
-        if (b.severity !== a.severity) return b.severity - a.severity;
-        return a.key.localeCompare(b.key);
-      });
-
-      const unmatchedOptionKeys = ['loss', 'oil50', 'payHigh', 'oilHigh', 'normal'];
-      const modeKey = side === 'a' ? 'unmatched_a' : 'unmatched_b';
-      const selectedUnmatchedStatuses = getSelectedCompareStatuses(modeKey, unmatchedOptionKeys);
-      const selectedUnmatchedSet = new Set(selectedUnmatchedStatuses);
-      const visibleUnmatchedCards = cardsData.filter(card => (card.statuses || []).some(s => selectedUnmatchedSet.has(s)));
-      const visibleUnmatchedRoutes = visibleUnmatchedCards.length;
-      const visibleUnmatchedTrips = visibleUnmatchedCards.reduce((sum, card) => sum + (card.unRows?.length || 0), 0);
-
-      // Recompute anomaly count from currently visible rows (after status filter),
-      // based on displayed anomaly-cause badges.
-      const visibleAnom = visibleUnmatchedCards
-        .reduce((sum, card) => {
-          const rows = card.unRows || [];
-          const cnt = rows.filter(r => (r.flags || []).some(f => !String(f).includes('ปกติ'))).length;
-          return sum + cnt;
-        }, 0);
-
-      window._unmatchedCardsData = cardsData;
-      let html = '';
-      cardsData.forEach((card, cIdx) => {
-        const { ga, unRows } = card;
-        const cardStatuses = card.statuses || [];
-        const isVisible = cardStatuses.some(s => selectedUnmatchedSet.has(s));
-        const displayStyle = isVisible ? '' : 'display:none;';
-        const cardAnomCount = unRows.filter(r => (r.flags || []).some(f => !String(f).includes('ปกติ'))).length;
-
-        const mTrips = unRows.map(r => r.ra);
-        const mySum = mTrips.reduce((s, r) => ({ recv: s.recv + (r.recv || 0), pay: s.pay + (r.pay || 0), oil: s.oil + (r.oil || 0), margin: s.margin + (r.margin || 0) }), { recv: 0, pay: 0, oil: 0, margin: 0 });
-
-        let tripRows = '';
-        unRows.forEach(({ ra, flags }, i) => {
-          const isNormal = flags.length === 1 && flags[0].includes('ปกติ');
-          const bgHighlight = isNormal ? 'rgba(16, 185, 129, 0.05)' : 'transparent';
-          const bg = isNormal ? `background:${bgHighlight}` : (i % 2 ? 'background:rgba(255,255,255,.02)' : '');
-          const aMClr = ra && (ra.margin || 0) >= 0 ? 'var(--green)' : 'var(--red)';
-          const aOilPct = ra && ra.pay > 0 ? (ra.oil || 0) / ra.pay * 100 : 0, aOilWarn = aOilPct > 50;
-          const aOilCell = ra && ra.oil > 0 ? `<span style="${aOilWarn ? 'color:var(--orange)' : ''}">${fmt(ra.oil)}${aOilWarn ? ` <span style="font-size:9px;font-weight:400;background:var(--orange);color:#fff;padding:1px 4px;border-radius:3px">${aOilPct.toFixed(0)}%</span>` : ''}</span>` : `<span style="color:var(--muted)">-</span>`;
-          const aFuelPrice = getOilPriceByDate(ra?.date);
-
-          tripRows += `<tr style="${bg};transition:background .15s" onmouseover="this.style.background='${themeHover}'" onmouseout="this.style.background='${bgHighlight}'">
-            <td style="padding:6px 9px;font-weight:400;color:var(--text)">${esc(ra.driver || '-')}</td>
-            <td style="padding:6px 9px;text-align:right;color:var(--blue)">${hasNum(aFuelPrice) ? fmt(aFuelPrice) : '<span style="color:var(--muted)">-</span>'}</td>
-            <td style="padding:6px 9px">${aOilCell}</td>
-            <td style="padding:6px 9px;text-align:right">${fmt(ra.recv)}</td>
-            <td style="padding:6px 9px;text-align:right">${hasNum(ra.pay) ? fmt(ra.pay) : '<span style="color:var(--muted)">-</span>'}</td>
-            <td style="padding:6px 9px;text-align:right;font-weight:400;color:${aMClr}">${fmt(ra.margin)}</td>
-            <td style="padding:6px 9px 6px 14px;border-left:1px solid var(--border)"><div class="dc-tags-wrap">${flags.join('')}</div></td>
-          </tr>`;
-        });
-
-        const sumRow = `<tr style="border-top:2px solid var(--border);background:rgba(255,255,255,.025)">
-          <td style="padding:8px 9px;font-weight:400;font-size:12px;color:#7dd3c7">รวม ${mTrips.length} เที่ยว</td>
-          <td style="padding:8px 9px;text-align:right;font-weight:400;font-size:12px;color:var(--muted)">-</td>
-          <td style="padding:8px 9px;font-weight:400;font-size:12px;color:var(--orange)">${fmt(mySum.oil)}</td>
-          <td style="padding:8px 9px;text-align:right;font-weight:400;font-size:12px">${fmt(mySum.recv)}</td>
-          <td style="padding:8px 9px;text-align:right;font-weight:400;font-size:12px">${hasNum(mySum.pay) ? fmt(mySum.pay) : '-'}</td>
-          <td style="padding:8px 9px;text-align:right;font-weight:400;font-size:12px;color:${mySum.margin >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(mySum.margin)}</td>
-          <td style="padding:8px 9px;border-left:1px solid var(--border);background:transparent">&nbsp;</td>
-        </tr>`;
-
-        html += `<div class="dc-status-card dc-status-card-${modeKey}" data-status-keys="${esc((card.statuses || []).join(','))}" data-anom-count="${cardAnomCount}" data-trip-count="${unRows.length}" style="${displayStyle}background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:16px;overflow:hidden;cursor:pointer;transition:border-color .2s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'" onclick="dcOpenUnmatchedModal(${cIdx}, '${side}')">
-          <div style="background:var(--surface);padding:10px 14px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;align-items:center;gap:12px">
-            <div style="flex:1;min-width:240px">
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
-                <span style="font-size:10px;font-weight:400;letter-spacing:.6px;text-transform:uppercase;color:#9ca3af;background:rgba(148,163,184,.10);border:1px solid rgba(148,163,184,.22);border-radius:999px;padding:2px 9px">${esc(ga.customer || '-')} · ${esc(ga.vtype || '-')}</span>
-              </div>
-              <div style="font-size:14px;font-weight:600;color:#7aa2ff;line-height:1.35;letter-spacing:.2px;word-break:break-word">${esc(ga.route || '-')}</div>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              <span style="font-size:11px;font-weight:400;background:${themeBadgeBg};color:${themeColor};padding:2px 8px;border-radius:6px">${esc(myLabel)}: <span style="color:var(--text);font-weight:400">${mTrips.length} เที่ยว</span></span>
-            </div>
-          </div>
-          <div style="overflow-x:auto">
-            <table style="width:100%;min-width:max-content;border-collapse:collapse;font-size:12px;table-layout:auto;white-space:nowrap">
-              <colgroup><col style="min-width:110px"><col style="width:90px"><col style="width:100px"><col style="width:90px"><col style="width:90px"><col style="width:90px"><col></colgroup>
-              <thead>
-                <tr>
-                  <th colspan="6" style="padding:5px 9px;text-align:left;font-size:11px;font-weight:700;color:${themeColor};background:${themeBg};border-bottom:1px solid var(--border)">${esc(myLabel)}</th>
-                  <th style="padding:5px 9px;background:rgba(236,72,153,.16);border-bottom:1px solid var(--border);border-left:1px solid var(--border)"></th>
-                </tr>
-                <tr>
-                  ${thMy('พขร.', 'left')}${thMy('ราคาน้ำมัน')}${thMy('สำรองน้ำมัน', 'left')}${thMy('ราคารับ')}${thMy('ราคาจ่าย')}${thMy('ส่วนต่าง')}
-                  <th style="padding:5px 9px 5px 14px;font-size:10px;font-weight:700;color:#f3b2c9;opacity:0.95;text-transform:uppercase;letter-spacing:.4px;background:rgba(236,72,153,.16);border-bottom:1px solid var(--border);border-left:1px solid var(--border)">สาเหตุความผิดปกติ</th>
-                </tr>
-              </thead>
-              <tbody>${tripRows}${sumRow}</tbody>
-            </table>
-          </div>
-        </div>`;
-      });
-
-      if (!totalRows || cardsData.length === 0) return `<div class="table-card" style="margin-top:0"><div style="padding:48px;text-align:center;color:var(--green)">✅ ไม่พบรายการเที่ยววิ่งที่จับคู่ไม่ได้ในหน้าต่างนี้</div></div>`;
-
-      const counts = {};
-      unmatchedOptionKeys.forEach(k => {
-        counts[k] = cardsData.filter(card => card.statuses.includes(k)).length;
-      });
-
-      return `<div style="margin-top:0">
-        <section class="dc-summary-head">
-          <div class="dc-summary-copy">
-            <h3 class="dc-summary-title">ข้อมูลที่ไม่ถูกเปรียบเทียบ: ${esc(myLabel)}</h3>
-            <p class="dc-summary-sub">รวม <span id="dc-summary-routes-${modeKey}">${visibleUnmatchedRoutes}</span> เส้นทาง / <span id="dc-summary-trips-${modeKey}">${visibleUnmatchedTrips}</span> เที่ยว • พบสัญญาณผิดปกติ <span id="dc-summary-anoms-${modeKey}">${visibleAnom}</span> เที่ยว</p>
-          </div>
-          <div class="dc-summary-filter">
-            ${renderCompareStatusFilter(modeKey, unmatchedOptionKeys, selectedUnmatchedStatuses, counts)}
-          </div>
-        </section>
-        ${html}
-      </div>`;
-    }
-
-    window.dcOpenUnmatchedModal = function (idx, side) {
-      const card = window._unmatchedCardsData[idx];
-      if (!card) return;
-      const isA = side === 'a';
-      const myLabel = isA ? _labelA : _labelB;
-
-      const themeColor = isA ? '#7dd3c7' : '#b8bdfd';
-      const themeBg = isA ? 'rgba(20,184,166,.16)' : 'rgba(99,102,241,.18)';
-      const themeBadgeBg = isA ? 'rgba(20,184,166,.22)' : 'rgba(99,102,241,.22)';
-
-      const existing = document.getElementById('dc_unm_modal');
-      if (existing) existing.remove();
-      const modal = document.createElement('div');
-      modal.id = 'dc_unm_modal';
-      modal.style = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)';
-      modal.onclick = e => { if (e.target === modal) modal.remove(); };
-
-      const thMy = (t, al = 'right') => `<th style="padding:5px 6px;text-align:${al};font-size:10px;font-weight:700;color:${themeColor};background:${themeBg};border-bottom:1px solid var(--border)">${t}</th>`;
-
-      let trs = '';
-      card.unRows.forEach(({ ra, flags }, i) => {
-        const bg = i % 2 ? 'background:rgba(255,255,255,.02)' : '';
-        const aMClr = ra && (ra.margin || 0) >= 0 ? 'var(--green)' : 'var(--red)';
-        const pA = getOilPriceByDate(ra?.date);
-
-        trs += `<tr style="${bg};border-bottom:1px solid rgba(255,255,255,.05)">
-          <td style="padding:8px 6px;white-space:nowrap">${esc(ra.date || '-')}</td>
-          <td style="padding:8px 6px;font-weight:400;min-width:90px">${esc(ra.driver || '-')}</td>
-          <td style="padding:8px 6px;color:var(--muted);white-space:nowrap">${esc(ra.vtype || '-')}</td>
-          <td style="padding:8px 6px;font-family:monospace;white-space:nowrap">${esc(ra.plate || '-')}</td>
-          <td style="padding:8px 6px;text-align:right;color:var(--blue)">${hasNum(pA) ? fmt(pA) : '-'}</td>
-          <td style="padding:8px 6px;text-align:right;color:var(--orange)">${hasNum(ra.oil) ? fmt(ra.oil) : '-'}</td>
-          <td style="padding:8px 6px;text-align:right">${hasNum(ra.recv) ? fmt(ra.recv) : '-'}</td>
-          <td style="padding:8px 6px;text-align:right">${hasNum(ra.pay) ? fmt(ra.pay) : '-'}</td>
-          <td style="padding:8px 6px;text-align:right;font-weight:400;color:${aMClr}">${hasNum(ra.margin) ? fmt(ra.margin) : '-'}</td>
-          <td style="padding:8px 6px 8px 10px;border-left:1px solid var(--border)"><div class="dc-tags-wrap">${flags.join('')}</div></td>
-        </tr>`;
-      });
-
-      const exportIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="16" height="16" fill="#5985E1" aria-hidden="true"><path d="M240-80q-33 0-56.5-23.5T160-160v-400q0-33 23.5-56.5T240-640h120v80H240v400h480v-400H600v-80h120q33 0 56.5 23.5T800-560v400q0 33-23.5 56.5T720-80H240Zm200-240v-447l-64 64-56-57 160-160 160 160-56 57-64-64v447h-80Z"/></svg>';
-      const exportBase = encodeURIComponent(`unmatched_${card.ga.route || 'route'}`);
-      modal.innerHTML = `
-        <div id="dc_unm_capture" data-export-root="1" style="background:var(--card);border:1px solid var(--border);border-radius:12px;max-width:900px;width:100%;max-height:95vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.6)">
-          <div style="background:var(--surface);padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
-            <div style="min-width:0">
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                <div style="font-size:15px;font-weight:700;color:#f1f5f9">รายละเอียดเที่ยวที่ไม่มีคู่เทียบ (${esc(myLabel)}): <span style="color:#7aa2ff">${esc(card.ga.route || '-')}</span></div>
-                <button type="button" onclick="window.dcExportModalPng('dc_unm_capture', '${exportBase}')" title="Export PNG" aria-label="Export PNG"
-                  style="background:rgba(89,133,225,.10);border:1px solid rgba(89,133,225,.35);color:#dbeafe;width:28px;height:28px;border-radius:7px;cursor:pointer;line-height:1;display:inline-flex;align-items:center;justify-content:center;transition:all .2s;padding:0"
-                  onmouseover="this.style.background='rgba(89,133,225,.18)';this.style.borderColor='rgba(89,133,225,.55)'"
-                  onmouseout="this.style.background='rgba(89,133,225,.10)';this.style.borderColor='rgba(89,133,225,.35)'">${exportIcon}</button>
-              </div>
-              <div style="font-size:11px;color:var(--muted);margin-top:2px">ลูกค้า: ${esc(card.ga.customer || '-')} · พบข้อมูล ${card.unRows.length} รายการ</div>
-            </div>
-            <button onclick="document.getElementById('dc_unm_modal').remove()"
-              style="background:rgba(255,255,255,.05);border:none;color:var(--muted);width:28px;height:28px;border-radius:6px;cursor:pointer;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;transition:all .2s"
-              onmouseover="this.style.background='rgba(255,255,255,.1)';this.style.color='var(--text)'"
-              onmouseout="this.style.background='rgba(255,255,255,.05)';this.style.color='var(--muted)'">&times;</button>
-          </div>
-          <div style="flex:1;overflow:auto;padding:0">
-            <table style="width:100%;border-collapse:collapse;font-size:11px">
-              <thead style="position:sticky;top:0;z-index:5;background:var(--surface)">
-                <tr>
-                  <th colspan="9" style="padding:8px 6px;text-align:center;font-size:12px;font-weight:800;color:${themeColor};background:${themeBg};border-bottom:1px solid var(--border)">ช่วงข้อมูล: ${esc(myLabel)}</th>
-                  <th style="padding:8px 6px;background:rgba(236,72,153,.16);border-bottom:1px solid var(--border);border-left:1px solid var(--border)"></th>
-                </tr>
-                <tr>
-                  ${thMy('วันที่', 'left')}${thMy('พขร.', 'left')}${thMy('รถ', 'left')}${thMy('ทะเบียน', 'left')}${thMy('ราคาน้ำมัน')}${thMy('สำรองน้ำมัน')}${thMy('รับ')}${thMy('จ่าย')}${thMy('ส่วนต่าง')}
-                  <th style="padding:5px 6px 5px 10px;font-size:10px;font-weight:700;color:#f3b2c9;opacity:0.95;background:rgba(236,72,153,.16);border-bottom:1px solid var(--border);border-left:1px solid var(--border)">ความผิดปกติ</th>
-                </tr>
-              </thead>
-              <tbody>${trs}</tbody>
-            </table>
-          </div>
-        </div>`;
-      document.body.appendChild(modal);
-    };
+    // CLEANUP: Legacy renderAnomalyTable / renderUnmatchedTable and their
+    // companion modals have been removed. Active versions live inside
+    // ACTIVE QA RENDER OVERRIDES (below) and use the per-row peer logic
+    // (no avg, no * 1.05).
+    function renderAnomalyTable() { /* overridden below */ return ''; }
+    function renderUnmatchedTable() { /* overridden below */ return ''; }
+    window.dcOpenAnomalyModal = function () { /* overridden below */ };
+    window.dcOpenUnmatchedModal = function () { /* overridden below */ };
 
     let _dcHtml2CanvasPromise = null;
     function ensureDcHtml2Canvas() {
@@ -6596,58 +5579,75 @@ function buildDailyCompare(data) {
       return d && d !== '-' && !/^null$/i.test(d) && !/^nan$/i.test(d);
     }
 
+    // Status logic for single-trip mode (Normal view + Unmatched cards):
+    // - loss: margin < 0
+    // - oil50: oil > pay * 0.5
+    // - payHigh: trip.pay > pay ของแถวอื่นอย่างน้อย 1 แถวใน peer (card เดียวกัน)
+    // - oilHigh: trip.oil > oil ของแถวอื่นอย่างน้อย 1 แถวใน peer
+    // - recvLow: มีแถวอื่นใน peer ที่ราคาน้ำมันเท่ากัน แต่ recv ต่างกัน
+    // - normal: ไม่เข้าเงื่อนไขใดเลย
+    // กรณีพิเศษ: ถ้า peer มีแค่ 1 แถว (รวมตัวเอง) จะไม่ติด payHigh / oilHigh / recvLow
     function dcQaTripStatuses(trip, peers = []) {
       const statuses = new Set();
       if ((trip.margin || 0) < 0) statuses.add('loss');
       if ((trip.oil || 0) > (trip.pay || 0) * 0.5 && (trip.pay || 0) > 0) statuses.add('oil50');
+
       if (peers.length > 1) {
-        const validPayPeers = peers.filter(r => (r.pay || 0) > 0);
-        const validOilPeers = peers.filter(r => (r.oil || 0) > 0);
+        const tripPay = trip.pay || 0;
+        const tripOil = trip.oil || 0;
+        const tripRecv = trip.recv || 0;
+        const tripOilPrice = getOilPriceByDate(trip?.date);
 
-        const avgPay = validPayPeers.length > 0
-          ? validPayPeers.reduce((s, r) => s + (r.pay || 0), 0) / validPayPeers.length
-          : 0;
-        const avgOil = validOilPeers.length > 0
-          ? validOilPeers.reduce((s, r) => s + (r.oil || 0), 0) / validOilPeers.length
-          : 0;
-
-        if (avgPay > 0 && (trip.pay || 0) > avgPay * 1.05) statuses.add('payHigh');
-        if (avgOil > 0 && (trip.oil || 0) > avgOil * 1.10) statuses.add('oilHigh');
+        for (const peer of peers) {
+          if (peer === trip) continue;
+          if (tripPay > 0 && (peer.pay || 0) > 0 && tripPay > (peer.pay || 0)) statuses.add('payHigh');
+          if (tripOil > 0 && (peer.oil || 0) > 0 && tripOil > (peer.oil || 0)) statuses.add('oilHigh');
+          if (hasNum(tripOilPrice)) {
+            const peerOilPrice = getOilPriceByDate(peer?.date);
+            if (hasNum(peerOilPrice) && Math.abs((tripOilPrice || 0) - (peerOilPrice || 0)) < 0.0001 &&
+              hasNum(tripRecv) && hasNum(peer.recv) && Math.abs(tripRecv - (peer.recv || 0)) >= 0.0001) {
+              statuses.add('recvLow');
+            }
+          }
+        }
       }
+
       if (!statuses.size) statuses.add('normal');
       return [...statuses];
     }
 
-    function dcQaCompareStatuses(ra, rb, avgPayB = 0, avgOilB = 0) {
+    // Status logic for matched-pair mode (Anomaly view):
+    // อิงคู่ A/B ของแถวเดียวกันตรงๆ
+    // - loss: margin ของ A หรือ B ติดลบ
+    // - oil50: A หรือ B มี oil > pay * 0.5
+    // - payHigh: A.pay > B.pay
+    // - oilHigh: A.oil > B.oil
+    // - recvLow: ราคาน้ำมันของ A/B เท่ากัน และ recv ของ A/B ต่างกัน
+    // - normal: ไม่เข้าเงื่อนไขใดเลย
+    function dcQaCompareStatuses(ra, rb) {
       const statuses = new Set();
       if ((ra.margin || 0) < 0 || (rb.margin || 0) < 0) statuses.add('loss');
       if (((ra.oil || 0) > (ra.pay || 0) * 0.5 && (ra.pay || 0) > 0) ||
         ((rb.oil || 0) > (rb.pay || 0) * 0.5 && (rb.pay || 0) > 0)) statuses.add('oil50');
 
-      const baselinePay = (avgPayB > 0) ? avgPayB : (rb.pay || 0);
-      const baselineOil = (avgOilB > 0) ? avgOilB : (rb.oil || 0);
-
-      if (baselinePay > 0 && (ra.pay || 0) > baselinePay * 1.05) statuses.add('payHigh');
-      if (baselineOil > 0 && (ra.oil || 0) > baselineOil * 1.05) statuses.add('oilHigh');
+      if ((ra.pay || 0) > (rb.pay || 0)) statuses.add('payHigh');
+      if ((ra.oil || 0) > (rb.oil || 0)) statuses.add('oilHigh');
 
       const oilPriceA = getOilPriceByDate(ra?.date);
       const oilPriceB = getOilPriceByDate(rb?.date);
       if (hasNum(oilPriceA) && hasNum(oilPriceB) && Math.abs((oilPriceA || 0) - (oilPriceB || 0)) < 0.0001 &&
         hasNum(ra.recv) && hasNum(rb.recv) && Math.abs((ra.recv || 0) - (rb.recv || 0)) >= 0.0001) statuses.add('recvLow');
+
       if (!statuses.size) statuses.add('normal');
       return [...statuses];
     }
 
-    function dcQaPairNotes(ra, rb, statuses, avgPayB = 0, avgOilB = 0) {
+    function dcQaPairNotes(ra, rb, statuses) {
       const labels = [];
       if (statuses.includes('loss')) labels.push('ตรวจส่วนต่าง');
       if (statuses.includes('oil50')) labels.push('ตรวจสำรองน้ำมัน');
-
-      const baselinePay = (avgPayB > 0) ? avgPayB : (rb.pay || 0);
-      const baselineOil = (avgOilB > 0) ? avgOilB : (rb.oil || 0);
-
-      if (statuses.includes('payHigh')) labels.push(`จ่าย A สูงกว่าเฉลี่ย B ${fmt((ra.pay || 0) - baselinePay)}`);
-      if (statuses.includes('oilHigh')) labels.push(`น้ำมัน A สูงกว่าเฉลี่ย B ${fmt((ra.oil || 0) - baselineOil)}`);
+      if (statuses.includes('payHigh')) labels.push(`จ่าย A สูงกว่า B ${fmt((ra.pay || 0) - (rb.pay || 0))}`);
+      if (statuses.includes('oilHigh')) labels.push(`น้ำมัน A สูงกว่า B ${fmt((ra.oil || 0) - (rb.oil || 0))}`);
       if (statuses.includes('recvLow')) labels.push(`ราคารับ A/B ไม่เท่ากัน ${fmt(Math.abs((ra.recv || 0) - (rb.recv || 0)))}`);
       return labels.length ? labels.join(', ') : 'ไม่มีสัญญาณเพิ่ม';
     }
@@ -6810,11 +5810,6 @@ function buildDailyCompare(data) {
       Object.keys(groupA).filter(k => groupB[k]).forEach(key => {
         const ga = groupA[key];
         const gb = groupB[key];
-        const tripsB = gb.trips || [];
-        const validPayB = tripsB.filter(r => (r.pay || 0) > 0);
-        const validOilB = tripsB.filter(r => (r.oil || 0) > 0);
-        const avgPayB = validPayB.length > 0 ? validPayB.reduce((sum, r) => sum + (r.pay || 0), 0) / validPayB.length : 0;
-        const avgOilB = validOilB.length > 0 ? validOilB.reduce((sum, r) => sum + (r.oil || 0), 0) / validOilB.length : 0;
         const usedB = new Set();
         const norm = d => String(d || '').trim().toLowerCase();
         const anomRows = [];
@@ -6823,7 +5818,7 @@ function buildDailyCompare(data) {
           if (idx < 0) return;
           usedB.add(idx);
           const rb = gb.trips[idx];
-          const statuses = dcQaCompareStatuses(ra, rb, avgPayB, avgOilB);
+          const statuses = dcQaCompareStatuses(ra, rb);
           anomRows.push({ ra, rb, statuses });
         });
         if (!anomRows.length) return;
@@ -7037,9 +6032,9 @@ function buildDailyCompare(data) {
         </article>`;
       }).join('');
       return `<section class="dc-qa-page">
-        <div class="dc-summary-head dc-qa-filter-head">
+        <div class="dc-summary-head dc-qa-filter-head" style="flex-direction:column;align-items:flex-start;">
           <div class="dc-summary-copy"><h3 class="dc-summary-title">รายเส้นทางที่ถูกเปรียบเทียบ <span id="dc-summary-routes-anomaly">${visibleCards.length}</span> เส้นทาง</h3><p class="dc-summary-sub">พบความผิดปกติที่ต้องตรวจสอบ <span id="dc-summary-anoms-anomaly">${visibleAnoms}</span> คู่เทียบ จากข้อมูลที่จับคู่ พขร. ได้ทั้งสองช่วง</p></div>
-          <div class="dc-summary-filter">${renderCompareStatusFilter('anomaly', optionKeys, selected, counts)}</div>
+          <div class="dc-summary-filter" style="width:100%;min-width:0;">${renderCompareStatusFilter('anomaly', optionKeys, selected, counts)}</div>
         </div>
         ${cardsHtml}
       </section>`;
@@ -7051,7 +6046,7 @@ function buildDailyCompare(data) {
       const cardsData = dcQaBuildUnmatchedCards(stA, stB, side);
       window._unmatchedCardsData = cardsData;
       if (!cardsData.length) return dcQaEmpty('ไม่พบรายการเที่ยววิ่งที่จับคู่ไม่ได้ในหน้าต่างนี้');
-      const optionKeys = ['loss', 'oil50', 'payHigh', 'oilHigh', 'normal'];
+      const optionKeys = ['loss', 'oil50', 'payHigh', 'oilHigh', 'recvLow', 'normal'];
       const modeKey = isA ? 'unmatched_a' : 'unmatched_b';
       const selected = getSelectedCompareStatuses(modeKey, optionKeys);
       const selectedSet = new Set(selected);
@@ -7082,9 +6077,9 @@ function buildDailyCompare(data) {
         </article>`;
       }).join('');
       return `<section class="dc-qa-page">
-        <div class="dc-summary-head dc-qa-filter-head">
+        <div class="dc-summary-head dc-qa-filter-head" style="flex-direction:column;align-items:flex-start;">
           <div class="dc-summary-copy"><h3 class="dc-summary-title">รายเส้นทางที่ไม่ถูกเปรียบเทียบ: ${esc(myLabel)}</h3><p class="dc-summary-sub">รวม <span id="dc-summary-routes-${modeKey}">${visibleCards.length}</span> เส้นทาง / <span id="dc-summary-trips-${modeKey}">${visibleTrips}</span> เที่ยว · พบความผิดปกติ <span id="dc-summary-anoms-${modeKey}">${visibleAnoms}</span> เที่ยว</p></div>
-          <div class="dc-summary-filter">${renderCompareStatusFilter(modeKey, optionKeys, selected, counts)}</div>
+          <div class="dc-summary-filter" style="width:100%;min-width:0;">${renderCompareStatusFilter(modeKey, optionKeys, selected, counts)}</div>
         </div>
         ${cardsHtml}
       </section>`;
