@@ -6993,8 +6993,11 @@ function initNav() {
   let sidebarHoverOpenTimer = 0;
   let sidebarHoverCloseTimer = 0;
   let sidebarHoverTransitionTimer = 0;
+  let sidebarHoverFrame = 0;
+  let pendingSidebarHoverExpanded = null;
   let sidebarPointerX = -1;
   let sidebarPointerY = -1;
+  const SIDEBAR_HOVER_TRANSITION_MS = 220;
   const hoverSidebarQuery = window.matchMedia?.('(min-width: 1024px) and (hover: hover) and (pointer: fine)');
   const setMobileSidebarOpen = (open) => {
     document.body.classList.toggle('sidebar-open', open);
@@ -7052,9 +7055,12 @@ function initNav() {
     if (sidebarHoverOpenTimer) window.clearTimeout(sidebarHoverOpenTimer);
     if (sidebarHoverCloseTimer) window.clearTimeout(sidebarHoverCloseTimer);
     if (sidebarHoverTransitionTimer) window.clearTimeout(sidebarHoverTransitionTimer);
+    if (sidebarHoverFrame) window.cancelAnimationFrame(sidebarHoverFrame);
     sidebarHoverOpenTimer = 0;
     sidebarHoverCloseTimer = 0;
     sidebarHoverTransitionTimer = 0;
+    sidebarHoverFrame = 0;
+    pendingSidebarHoverExpanded = null;
     document.body.classList.remove('sidebar-hover-transitioning');
   };
 
@@ -7069,15 +7075,27 @@ function initNav() {
 
   const setSidebarHoverExpanded = (expanded) => {
     if (!sidebarAutoEnabled) return;
-    if (document.body.classList.contains('sidebar-hover-expanded') === expanded) return;
+    const currentExpanded = document.body.classList.contains('sidebar-hover-expanded');
+    if (currentExpanded === expanded && pendingSidebarHoverExpanded === null) return;
+    if (sidebarHoverOpenTimer) window.clearTimeout(sidebarHoverOpenTimer);
+    if (sidebarHoverCloseTimer) window.clearTimeout(sidebarHoverCloseTimer);
+    if (sidebarHoverFrame) window.cancelAnimationFrame(sidebarHoverFrame);
+    sidebarHoverOpenTimer = 0;
+    sidebarHoverCloseTimer = 0;
+    sidebarHoverFrame = 0;
+    pendingSidebarHoverExpanded = expanded;
     document.body.classList.add('sidebar-hover-transitioning');
-    document.body.classList.toggle('sidebar-hover-expanded', expanded);
+    sidebarHoverFrame = window.requestAnimationFrame(() => {
+      sidebarHoverFrame = 0;
+      document.body.classList.toggle('sidebar-hover-expanded', pendingSidebarHoverExpanded);
+      pendingSidebarHoverExpanded = null;
+    });
     if (sidebarHoverTransitionTimer) window.clearTimeout(sidebarHoverTransitionTimer);
     sidebarHoverTransitionTimer = window.setTimeout(() => {
       document.body.classList.remove('sidebar-hover-transitioning');
       sidebarHoverTransitionTimer = 0;
       reconcileSidebarHover();
-    }, 260);
+    }, SIDEBAR_HOVER_TRANSITION_MS);
   };
 
   const scheduleSidebarOpen = (delay = 35) => {
@@ -7136,6 +7154,12 @@ function initNav() {
     sidebarPointerY = e.clientY;
     scheduleSidebarOpen(35);
   });
+
+  sidebar.addEventListener('pointermove', e => {
+    if (!sidebarAutoEnabled || e.pointerType === 'touch') return;
+    sidebarPointerX = e.clientX;
+    sidebarPointerY = e.clientY;
+  }, { passive: true });
 
   sidebar.addEventListener('pointerleave', e => {
     if (!sidebarAutoEnabled || e.pointerType === 'touch') return;
