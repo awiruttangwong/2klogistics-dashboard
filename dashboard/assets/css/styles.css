@@ -5679,14 +5679,14 @@ body.sidebar-animating .chart-card {
   width: 100%;
 }
 
-/* Unified Column Widths for Single/Normal QA Tables (8 columns) */
+/* Unified Column Widths for Single/Normal QA Tables (8 columns) - 100% Proportional */
 .dc-qa-case .dc-qa-table:not(.dc-qa-pair-table) th:nth-child(1),
 .dc-qa-case .dc-qa-table:not(.dc-qa-pair-table) td:nth-child(1) {
   width: 8% !important;
 }
 .dc-qa-case .dc-qa-table:not(.dc-qa-pair-table) th:nth-child(2),
 .dc-qa-case .dc-qa-table:not(.dc-qa-pair-table) td:nth-child(2) {
-  width: 20% !important;
+  width: 18% !important;
 }
 .dc-qa-case .dc-qa-table:not(.dc-qa-pair-table) th:nth-child(3),
 .dc-qa-case .dc-qa-table:not(.dc-qa-pair-table) td:nth-child(3) {
@@ -5710,10 +5710,10 @@ body.sidebar-animating .chart-card {
 }
 .dc-qa-case .dc-qa-table:not(.dc-qa-pair-table) th:nth-child(8),
 .dc-qa-case .dc-qa-table:not(.dc-qa-pair-table) td:nth-child(8) {
-  width: 19% !important;
+  width: 21% !important;
 }
 
-/* Unified Column Widths for Comparison Pair QA Tables (9 columns) */
+/* Unified Column Widths for Comparison Pair QA Tables (9 columns) - 100% Proportional */
 .dc-qa-case .dc-qa-pair-table th:nth-child(1),
 .dc-qa-case .dc-qa-pair-table td:nth-child(1) {
   width: 8% !important;
@@ -5728,28 +5728,30 @@ body.sidebar-animating .chart-card {
 }
 .dc-qa-case .dc-qa-pair-table th:nth-child(4),
 .dc-qa-case .dc-qa-pair-table td:nth-child(4) {
-  width: 9% !important;
+  width: 10% !important;
 }
 .dc-qa-case .dc-qa-pair-table th:nth-child(5),
 .dc-qa-case .dc-qa-pair-table td:nth-child(5) {
-  width: 9% !important;
+  width: 10% !important;
 }
 .dc-qa-case .dc-qa-pair-table th:nth-child(6),
 .dc-qa-case .dc-qa-pair-table td:nth-child(6) {
-  width: 10% !important;
+  width: 11% !important;
 }
 .dc-qa-case .dc-qa-pair-table th:nth-child(7),
 .dc-qa-case .dc-qa-pair-table td:nth-child(7) {
-  width: 10% !important;
+  width: 11% !important;
 }
 .dc-qa-case .dc-qa-pair-table th:nth-child(8),
 .dc-qa-case .dc-qa-pair-table td:nth-child(8) {
-  width: 10% !important;
+  width: 11% !important;
 }
 .dc-qa-case .dc-qa-pair-table th:nth-child(9),
 .dc-qa-case .dc-qa-pair-table td:nth-child(9) {
-  width: 16% !important;
+  width: 11% !important;
 }
+
+
 
 .dc-qa-table th {
   position: sticky;
