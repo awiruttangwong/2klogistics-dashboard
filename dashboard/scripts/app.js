@@ -5770,7 +5770,7 @@ function buildDailyCompare(data) {
         ws1Data.push([hCell('รายการ'), hCell('ค่า'), hCell(''), hCell('')]);
         const overview = [
           [cCell('ช่วงเวลาหลัก', { bold: true }), cCell(periodALabel), cCell(''), cCell('')],
-          [cCell('วันอ้างอิงเพื่อเปรียบเทียบ (ย้อนหลัง 3 วัน)', { bold: true }), cCell(refDaysList.length ? refDaysList.join(', ') + ` (เปรียบเทียบเที่ยววิ่งอดีต: เริ่มหาจากวันที่ ${d1} ➔ ไม่มีข้อมูล ➔ หาที่วันที่ ${d2} ➔ ไม่มีข้อมูล ➔ หาที่วันที่ ${d3})` : 'ไม่พบข้อมูลย้อนหลัง', { wrap: true }), cCell(''), cCell(''), cCell(''), cCell(''), cCell('')],
+          [cCell('วันอ้างอิงเพื่อเปรียบเทียบ (ย้อนหลัง 3 วัน)', { bold: true }), cCell(refDaysList.length ? refDaysList.join(', ') + ` (เปรียบเทียบเที่ยววิ่งอดีต: เริ่มหาจากวันที่ ${d1} -> ไม่มีข้อมูล -> หาที่วันที่ ${d2} -> ไม่มีข้อมูล -> หาที่วันที่ ${d3})` : 'ไม่พบข้อมูลย้อนหลัง', { wrap: true }), cCell(''), cCell(''), cCell(''), cCell(''), cCell('')],
           [cCell('จำนวนเส้นทาง', { bold: true }), cCell((_stA.routes || []).length, { numFmt: '#,##0', align: 'right' }), cCell(''), cCell('')],
           [cCell('เส้นทางที่มีข้อมูลเปรียบเทียบ', { bold: true }), cCell(routesWithRefCount, { numFmt: '#,##0', align: 'right' }), cCell(''), cCell('')],
           [cCell('จำนวนเที่ยว', { bold: true }), cCell(_stA.trips || 0, { numFmt: '#,##0', align: 'right' }), cCell(''), cCell('')],
