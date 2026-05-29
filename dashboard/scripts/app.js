@@ -1355,7 +1355,7 @@ function buildLossDrillFilterMeta(rows) {
   const customerOptions = Array.from(new Set(rows.map(row => row.customer).filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), 'th'));
   const routeOptionMap = {};
   rows.forEach(row => {
-    const value = String(row.routeKey || routeIdentityKey(row)).trim();
+    const value = String(routeIdentityKey(row)).trim();
     if (!value) return;
     if (!routeOptionMap[value]) routeOptionMap[value] = { value, label: routeDisplay(row) };
   });
@@ -1391,7 +1391,7 @@ function applyLossDrillFilters(rows, filters) {
 
   return rows.filter(row => {
     if (filterCustomer && row.customer !== filterCustomer) return false;
-    if (filterRoute && (row.routeKey || routeIdentityKey(row)) !== filterRoute) return false;
+    if (filterRoute && routeIdentityKey(row) !== filterRoute) return false;
 
     const isoDate = normalizeIsoDate(row.date);
     if (hasMonth) {
@@ -1486,7 +1486,7 @@ function buildLossDrillPayload(kind, row, trips) {
     subtitle = 'รายการเที่ยวที่มีส่วนต่างขาดทุนของลูกค้ารายนี้';
   } else if (kind === 'route') {
     const routeKey = lossDrillNorm(row?.routeKey || row?.name || '-');
-    matched = lossTrips.filter(t => lossDrillNorm(t.routeKey || routeIdentityKey(t)) === routeKey);
+    matched = lossTrips.filter(t => lossDrillNorm(routeIdentityKey(t)) === routeKey);
     title = `ขาดทุนแยกตามเส้นทาง: ${routeDisplay(row)}`;
     subtitle = 'รายการเที่ยวที่มีส่วนต่างขาดทุนของเส้นทางนี้';
   }
@@ -1508,7 +1508,7 @@ function buildLossDrillPayload(kind, row, trips) {
       date: t.date || '-',
       customer: t.customer || '-',
       route: t.routeGroup || t.route || '-',
-      routeKey: t.routeKey || routeIdentityKey(t),
+      routeKey: routeIdentityKey(t),
       routeDesc: t.routeDesc || '-',
       vtype: t.vtype || '-',
       driver: t.driver || '-',
@@ -3968,7 +3968,7 @@ function buildDailyCompare(data) {
     const rows = validFd.filter(r => {
       if (r.date < dateStart || r.date > dateEnd) return false;
       if (Array.isArray(custF) && custF.length > 0 && !custF.includes(r.customer || '-')) return false;
-      if (Array.isArray(routeF) && routeF.length > 0 && !routeF.includes(r.routeKey || routeIdentityKey(r))) return false;
+      if (Array.isArray(routeF) && routeF.length > 0 && !routeF.includes(routeIdentityKey(r))) return false;
       if (Array.isArray(vtypeF) && vtypeF.length > 0 && !vtypeF.includes(r.vtype || '-')) return false;
       return true;
     });
@@ -4628,7 +4628,7 @@ function buildDailyCompare(data) {
       if (!routePanelOpen) {
         const routeOptionMap = {};
         allRows.forEach(r => {
-          const value = r.routeKey || routeIdentityKey(r);
+          const value = routeIdentityKey(r);
           if (!routeOptionMap[value]) routeOptionMap[value] = { value, label: routeDisplay(r), search: `${routeDisplay(r)} ${r.route || ''} ${value}` };
         });
         const routeOptions = Object.values(routeOptionMap).sort((a, b) => String(a.label).localeCompare(String(b.label), 'th'));
@@ -4636,7 +4636,7 @@ function buildDailyCompare(data) {
       }
 
       if (!vtypePanelOpen) {
-        const vtypeOptions = [...new Set(allRows.filter(r => routeF.length === 0 || routeF.includes(r.routeKey || routeIdentityKey(r))).map(r => r.vtype || '-'))].sort();
+        const vtypeOptions = [...new Set(allRows.filter(r => routeF.length === 0 || routeF.includes(routeIdentityKey(r))).map(r => r.vtype || '-'))].sort();
         buildMsOptions('vtype', vtypeOptions, vtypeF);
       }
 
@@ -5342,7 +5342,7 @@ function buildDailyCompare(data) {
       const { custF, routeF, vtypeF } = getFilters();
       const routeLabelMap = {};
       validFd.forEach(row => {
-        const value = row.routeKey || routeIdentityKey(row);
+        const value = routeIdentityKey(row);
         if (!routeLabelMap[value]) routeLabelMap[value] = routeDisplay(row);
       });
       const routeFilterLabels = routeF.map(route => routeLabelMap[route] || route);
@@ -5601,7 +5601,7 @@ function buildDailyCompare(data) {
       const metricPairCell = bulletPairCell;
       function rowPeerRows(sourceRows, row) {
         return (sourceRows || []).filter(r =>
-          r.customer === row.customer && (r.routeKey || routeIdentityKey(r)) === (row.routeKey || routeIdentityKey(row)) && r.vtype === row.vtype
+          r.customer === row.customer && routeIdentityKey(r) === routeIdentityKey(row) && r.vtype === row.vtype
         );
       }
 
@@ -5616,7 +5616,7 @@ function buildDailyCompare(data) {
         let rowIdx = wsData.length;
 
         const routeCases = (st?.routes || []).map(route => {
-          const trips = (st?.rows || []).filter(r => r.customer === route.customer && (r.routeKey || routeIdentityKey(r)) === (route.routeKey || routeIdentityKey(route)) && r.vtype === route.vtype)
+          const trips = (st?.rows || []).filter(r => r.customer === route.customer && routeIdentityKey(r) === routeIdentityKey(route) && r.vtype === route.vtype)
             .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
           const rows = trips.map(ra => ({ ra, statuses: dcQaTripStatuses(ra, trips) }))
             .sort((a, b) => {
@@ -5941,7 +5941,7 @@ function buildDailyCompare(data) {
         let totalAnomCount = 0;
         let routesWithRefCount = 0;
         (_stA.routes || []).forEach(route => {
-          const trips = (_stA.rows || []).filter(r => r.customer === route.customer && (r.routeKey || routeIdentityKey(r)) === (route.routeKey || routeIdentityKey(route)) && r.vtype === route.vtype);
+          const trips = (_stA.rows || []).filter(r => r.customer === route.customer && routeIdentityKey(r) === routeIdentityKey(route) && r.vtype === route.vtype);
           if (trips.length === 0) return;
           const routeKey = dcQaRouteKey(trips[0]);
           const refTripsForRoute = getRefForRouteSummary(routeKey);
@@ -6247,7 +6247,7 @@ function buildDailyCompare(data) {
         // Build cases (route + per-trip statuses + ref trips), identical to renderSingleTable.
         const buildSingleCases = () => {
           return (_stA.routes || []).map(route => {
-            const trips = (_stA.rows || []).filter(r => r.customer === route.customer && (r.routeKey || routeIdentityKey(r)) === (route.routeKey || routeIdentityKey(route)) && r.vtype === route.vtype)
+            const trips = (_stA.rows || []).filter(r => r.customer === route.customer && routeIdentityKey(r) === routeIdentityKey(route) && r.vtype === route.vtype)
               .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
             const routeKey = trips.length > 0 ? dcQaRouteKey(trips[0]) : null;
             const refResult = routeKey ? getRefForRoute(routeKey) : null;
@@ -7053,7 +7053,7 @@ function buildDailyCompare(data) {
       };
 
       const cases = stA.routes.map(route => {
-        const trips = (stA.rows || []).filter(r => r.customer === route.customer && (r.routeKey || routeIdentityKey(r)) === (route.routeKey || routeIdentityKey(route)) && r.vtype === route.vtype)
+        const trips = (stA.rows || []).filter(r => r.customer === route.customer && routeIdentityKey(r) === routeIdentityKey(route) && r.vtype === route.vtype)
           .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
 
         // Per-route: find nearest ref day that has data for this route+vtype.
@@ -7131,7 +7131,7 @@ function buildDailyCompare(data) {
         const aRowsHtml = previewRows.map(row => dcQaSingleTripRow(row.ra, row.statuses, false)).join('');
         const refRowsHtml = routeHasRefTrips ? refTripsForCard.map(renderRefRow).join('') : '';
 
-        return `<article class="dc-qa-case dc-qa-clickable dc-status-card dc-status-card-normal" data-severity="${item.severity}" data-status-keys="${esc(statuses.join(','))}" data-anom-count="${anomCount}" data-trip-count="${rows.length}" data-recv="${route.recv || 0}" data-pay="${route.pay || 0}" data-oil="${route.oil || 0}" data-margin="${route.margin || 0}" style="${displayStyle}" onclick="dcOpenRouteModal('${stA.dateStart}','${stA.dateEnd}','${esc(route.routeKey || routeIdentityKey(route))}','${esc(route.customer)}','${esc(route.vtype)}')">
+        return `<article class="dc-qa-case dc-qa-clickable dc-status-card dc-status-card-normal" data-severity="${item.severity}" data-status-keys="${esc(statuses.join(','))}" data-anom-count="${anomCount}" data-trip-count="${rows.length}" data-recv="${route.recv || 0}" data-pay="${route.pay || 0}" data-oil="${route.oil || 0}" data-margin="${route.margin || 0}" style="${displayStyle}" onclick="dcOpenRouteModal('${stA.dateStart}','${stA.dateEnd}','${esc(routeIdentityKey(route))}','${esc(route.customer)}','${esc(route.vtype)}')">
           <header class="dc-qa-case-head">
             <div class="dc-qa-title-block">
               <div class="dc-qa-identity"><span class="dc-qa-customer">${esc(route.customer || '-')}</span><span class="dc-qa-vtype">${esc(route.vtype || '-')}</span></div>
@@ -7285,7 +7285,7 @@ function buildDailyCompare(data) {
 
     window.dcOpenRouteModal = function (dateStart, dateEnd, routeStr, specificCust, specificVtype) {
       const rows = validFd.filter(r =>
-        r.date >= dateStart && r.date <= dateEnd && (r.routeKey || routeIdentityKey(r)) === routeStr &&
+        r.date >= dateStart && r.date <= dateEnd && routeIdentityKey(r) === routeStr &&
         (!specificCust || r.customer === specificCust) &&
         (!specificVtype || r.vtype === specificVtype)
       ).sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
