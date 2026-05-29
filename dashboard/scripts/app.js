@@ -6460,67 +6460,105 @@ function buildDailyCompare(data) {
             wsData.push(top);
             rowIdx++;
 
-            // A-day trips
-            visibleRows.forEach(entry => {
-              const r = entry.ra || {};
-              const mar = (r.margin == null || isNaN(r.margin)) ? ((r.recv || 0) - (r.pay || 0) - (r.oil || 0)) : r.margin;
-              const oilPrice = getOilPriceByDate(r.date);
-              // Display statuses:
-              //   statusFilter (per-status sheet) → show ONLY that one tag
-              //   userFilterSet (ALL sheet)       → show only tags the user has selected
-              //   neither                         → show all tags
-              let displayStatuses;
-              if (statusFilter) {
-                displayStatuses = [statusFilter];
-              } else if (userFilterSet) {
-                const ss = cleanStatuses(entry.statuses || ['normal']);
-                const filtered = ss.filter(s => userFilterSet.has(s));
-                displayStatuses = filtered.length ? filtered : ss;
-              } else {
-                displayStatuses = entry.statuses || ['normal'];
-              }
-              const zf = (rowIdx % 2 === 0) ? 'F9FAFB' : null;
-              const row = [
-                cCell(r.customer || '-', { fill: zf }),
-                cCell(routeDisplay(r), { fill: zf }),
-                cCell(r.date || '-', { fill: zf }),
-                cCell(r.driver || '-', { fill: zf }),
-                cCell(r.vtype || '-', { fill: zf }),
-                cCell(r.plate || '-', { fill: zf }),
-                hasNum(oilPrice) ? cCell(fmtMoney(oilPrice), { align: 'right', fill: zf }) : cCell('-', { align: 'right', fill: zf }),
-                cCell(fmtMoney(r.oil), { align: 'right', fill: zf }),
-                cCell(fmtMoney(r.recv), { align: 'right', fill: zf }),
-                cCell(fmtMoney(r.pay), { align: 'right', fill: zf }),
-                mar < 0 ? rCell(fmtMoney(mar), { align: 'right', fill: zf }) : gCell(fmtMoney(mar), { align: 'right', fill: zf }),
-                statusRichCell(displayStatuses, { fill: zf, align: 'left', wrap: true, valign: 'top' }),
-                cCell('', { fill: zf })
-              ];
-              wsData.push(row);
-              rowIdx++;
-            });
+            // Zigzag ordering for export: A-trip row followed by best-effort matched
+            // reference row. Remaining ref rows are appended to preserve full data.
+            const buildZigzagExportSequence = (aEntries, refTrips) => {
+              const normalizeDriverKey = trip => String(trip?.driver || '').trim().toUpperCase();
+              const refBuckets = {};
+              const refFallback = [];
+              (refTrips || []).forEach(refTrip => {
+                const key = normalizeDriverKey(refTrip);
+                if (key && key !== '-') {
+                  if (!refBuckets[key]) refBuckets[key] = [];
+                  refBuckets[key].push(refTrip);
+                }
+                refFallback.push(refTrip);
+              });
+              const removeFromBucket = (trip) => {
+                const key = normalizeDriverKey(trip);
+                if (!key || !refBuckets[key] || !refBuckets[key].length) return;
+                const idx = refBuckets[key].indexOf(trip);
+                if (idx >= 0) refBuckets[key].splice(idx, 1);
+              };
+              const consumeRefTrip = (aTrip) => {
+                const key = normalizeDriverKey(aTrip);
+                let picked = null;
+                if (key && refBuckets[key] && refBuckets[key].length) picked = refBuckets[key].shift();
+                else if (refFallback.length) {
+                  picked = refFallback[0];
+                  removeFromBucket(picked);
+                }
+                if (!picked) return null;
+                const idx = refFallback.indexOf(picked);
+                if (idx >= 0) refFallback.splice(idx, 1);
+                return picked;
+              };
+              const seq = [];
+              (aEntries || []).forEach(entry => {
+                seq.push({ kind: 'a', entry });
+                const matchedRef = consumeRefTrip(entry?.ra || {});
+                if (matchedRef) seq.push({ kind: 'ref', trip: matchedRef });
+              });
+              refFallback.forEach(refTrip => seq.push({ kind: 'ref', trip: refTrip }));
+              return seq;
+            };
 
-            // Reference-day trips for this route (always shown for context, light tint).
-            // In lens mode we still show full ref trips since user may want to compare.
-            (item.refTripsForRoute || []).forEach(refTrip => {
-              const mar = (refTrip.margin == null || isNaN(refTrip.margin)) ? ((refTrip.recv || 0) - (refTrip.pay || 0) - (refTrip.oil || 0)) : refTrip.margin;
-              const oilPrice = getOilPriceByDate(refTrip.date);
-              const refFill = 'EFF6FF'; // light blue tint to distinguish ref rows
-              const row = [
-                cCell(refTrip.customer || '-', { fill: refFill }),
-                cCell(routeDisplay(refTrip), { fill: refFill }),
-                cCell(refTrip.date || '-', { fill: refFill }),
-                cCell(refTrip.driver || '-', { fill: refFill }),
-                cCell(refTrip.vtype || '-', { fill: refFill }),
-                cCell(refTrip.plate || '-', { fill: refFill }),
-                hasNum(oilPrice) ? cCell(fmtMoney(oilPrice), { align: 'right', fill: refFill }) : cCell('-', { align: 'right', fill: refFill }),
-                cCell(fmtMoney(refTrip.oil), { align: 'right', fill: refFill }),
-                cCell(fmtMoney(refTrip.recv), { align: 'right', fill: refFill }),
-                cCell(fmtMoney(refTrip.pay), { align: 'right', fill: refFill }),
-                mar < 0 ? rCell(fmtMoney(mar), { align: 'right', fill: refFill }) : gCell(fmtMoney(mar), { align: 'right', fill: refFill }),
-                cCell('', { fill: refFill }),
-                cCell('', { fill: refFill })
-              ];
-              wsData.push(row);
+            const sequence = buildZigzagExportSequence(visibleRows, item.refTripsForRoute || []);
+            sequence.forEach(part => {
+              if (part.kind === 'a') {
+                const entry = part.entry || {};
+                const r = entry.ra || {};
+                const mar = (r.margin == null || isNaN(r.margin)) ? ((r.recv || 0) - (r.pay || 0) - (r.oil || 0)) : r.margin;
+                const oilPrice = getOilPriceByDate(r.date);
+                let displayStatuses;
+                if (statusFilter) {
+                  displayStatuses = [statusFilter];
+                } else if (userFilterSet) {
+                  const ss = cleanStatuses(entry.statuses || ['normal']);
+                  const filtered = ss.filter(s => userFilterSet.has(s));
+                  displayStatuses = filtered.length ? filtered : ss;
+                } else {
+                  displayStatuses = entry.statuses || ['normal'];
+                }
+                const zf = (rowIdx % 2 === 0) ? 'F9FAFB' : null;
+                const row = [
+                  cCell(r.customer || '-', { fill: zf }),
+                  cCell(routeDisplay(r), { fill: zf }),
+                  cCell(r.date || '-', { fill: zf }),
+                  cCell(r.driver || '-', { fill: zf }),
+                  cCell(r.vtype || '-', { fill: zf }),
+                  cCell(r.plate || '-', { fill: zf }),
+                  hasNum(oilPrice) ? cCell(fmtMoney(oilPrice), { align: 'right', fill: zf }) : cCell('-', { align: 'right', fill: zf }),
+                  cCell(fmtMoney(r.oil), { align: 'right', fill: zf }),
+                  cCell(fmtMoney(r.recv), { align: 'right', fill: zf }),
+                  cCell(fmtMoney(r.pay), { align: 'right', fill: zf }),
+                  mar < 0 ? rCell(fmtMoney(mar), { align: 'right', fill: zf }) : gCell(fmtMoney(mar), { align: 'right', fill: zf }),
+                  statusRichCell(displayStatuses, { fill: zf, align: 'left', wrap: true, valign: 'top' }),
+                  cCell('', { fill: zf })
+                ];
+                wsData.push(row);
+              } else {
+                const refTrip = part.trip || {};
+                const mar = (refTrip.margin == null || isNaN(refTrip.margin)) ? ((refTrip.recv || 0) - (refTrip.pay || 0) - (refTrip.oil || 0)) : refTrip.margin;
+                const oilPrice = getOilPriceByDate(refTrip.date);
+                const refFill = 'F3F4F6'; // light gray tint to distinguish reference-day rows
+                const row = [
+                  cCell(refTrip.customer || '-', { fill: refFill }),
+                  cCell(routeDisplay(refTrip), { fill: refFill }),
+                  cCell(refTrip.date || '-', { fill: refFill }),
+                  cCell(refTrip.driver || '-', { fill: refFill }),
+                  cCell(refTrip.vtype || '-', { fill: refFill }),
+                  cCell(refTrip.plate || '-', { fill: refFill }),
+                  hasNum(oilPrice) ? cCell(fmtMoney(oilPrice), { align: 'right', fill: refFill }) : cCell('-', { align: 'right', fill: refFill }),
+                  cCell(fmtMoney(refTrip.oil), { align: 'right', fill: refFill }),
+                  cCell(fmtMoney(refTrip.recv), { align: 'right', fill: refFill }),
+                  cCell(fmtMoney(refTrip.pay), { align: 'right', fill: refFill }),
+                  mar < 0 ? rCell(fmtMoney(mar), { align: 'right', fill: refFill }) : gCell(fmtMoney(mar), { align: 'right', fill: refFill }),
+                  cCell('', { fill: refFill }),
+                  cCell('', { fill: refFill })
+                ];
+                wsData.push(row);
+              }
               rowIdx++;
             });
           });
@@ -7145,6 +7183,53 @@ function buildDailyCompare(data) {
           </tr>`;
         };
 
+        // Alternate (zigzag) order for readability:
+        // A-day trip row followed by a best-effort matched ref-day row.
+        // Any leftover ref rows are appended so no data is lost.
+        const buildZigzagRowsHtml = (aRows, refRows) => {
+          const normalizeDriverKey = (trip) => String(trip?.driver || '').trim().toUpperCase();
+          const refBuckets = {};
+          const refFallback = [];
+          (refRows || []).forEach(refTrip => {
+            const key = normalizeDriverKey(refTrip);
+            if (key && key !== '-') {
+              if (!refBuckets[key]) refBuckets[key] = [];
+              refBuckets[key].push(refTrip);
+            }
+            refFallback.push(refTrip);
+          });
+          const removeFromBucket = (trip) => {
+            const key = normalizeDriverKey(trip);
+            if (!key || !refBuckets[key] || !refBuckets[key].length) return;
+            const idx = refBuckets[key].indexOf(trip);
+            if (idx >= 0) refBuckets[key].splice(idx, 1);
+          };
+
+          const consumeRefTrip = (aTrip) => {
+            const key = normalizeDriverKey(aTrip);
+            let picked = null;
+            if (key && refBuckets[key] && refBuckets[key].length) {
+              picked = refBuckets[key].shift();
+            } else if (refFallback.length) {
+              picked = refFallback[0];
+              removeFromBucket(picked);
+            }
+            if (!picked) return null;
+            const idx = refFallback.indexOf(picked);
+            if (idx >= 0) refFallback.splice(idx, 1);
+            return picked;
+          };
+
+          const out = [];
+          (aRows || []).forEach(entry => {
+            out.push(dcQaSingleTripRow(entry.ra, entry.statuses, false));
+            const matchedRef = consumeRefTrip(entry.ra);
+            if (matchedRef) out.push(renderRefRow(matchedRef));
+          });
+          refFallback.forEach(refTrip => out.push(renderRefRow(refTrip)));
+          return out.join('');
+        };
+
         // Strip label: show the actual ref date used for THIS route (may differ per route).
         const cardRefLabel = item.refDateLabel || null;
         let stripRefLabel = '';
@@ -7160,9 +7245,10 @@ function buildDailyCompare(data) {
           }
         }
 
-        // Body rows: A trips first, then all ref trips directly (no divider row).
-        const aRowsHtml = previewRows.map(row => dcQaSingleTripRow(row.ra, row.statuses, false)).join('');
-        const refRowsHtml = routeHasRefTrips ? refTripsForCard.map(renderRefRow).join('') : '';
+        // Body rows: alternate A/ref rows for easier visual comparison.
+        const rowsHtml = routeHasRefTrips
+          ? buildZigzagRowsHtml(previewRows, refTripsForCard)
+          : previewRows.map(row => dcQaSingleTripRow(row.ra, row.statuses, false)).join('');
 
         return `<article class="dc-qa-case dc-qa-clickable dc-status-card dc-status-card-normal" data-severity="${item.severity}" data-status-keys="${esc(statuses.join(','))}" data-anom-count="${anomCount}" data-trip-count="${rows.length}" data-recv="${route.recv || 0}" data-pay="${route.pay || 0}" data-oil="${route.oil || 0}" data-margin="${route.margin || 0}" style="${displayStyle}" onclick="dcOpenRouteModal('${stA.dateStart}','${stA.dateEnd}','${esc(routeIdentityKey(route))}','${esc(route.customer)}','${esc(route.vtype)}')">
           <header class="dc-qa-case-head">
@@ -7180,7 +7266,7 @@ function buildDailyCompare(data) {
           <div class="dc-qa-table-wrap">
             <table class="dc-qa-table">
               <thead><tr><th>วันที่</th><th>พขร.</th><th class="is-right">ราคาน้ำมัน</th><th class="is-right">สำรองน้ำมัน</th><th class="is-right">ราคารับ</th><th class="is-right">ราคาจ่าย</th><th class="is-right">ส่วนต่าง</th><th>ความผิดปกติ</th></tr></thead>
-              <tbody>${aRowsHtml}${refRowsHtml}</tbody>
+              <tbody>${rowsHtml}</tbody>
             </table>
           </div>
         </article>`;
