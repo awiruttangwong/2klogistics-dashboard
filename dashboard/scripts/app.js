@@ -4686,7 +4686,7 @@ function buildDailyCompare(data) {
         if (runToken !== _compareRunToken) return;
         const [a1, a2] = getRangeDates('dc_rangeA', d1def, d1def);
         const [b1, b2] = getRangeDates('dc_rangeB', d2def, d2def);
-        const rollingPreset = getRollingSevenPreset(allDates[allDates.length - 1] || '');
+        const rollingPreset = getRollingSevenPreset(defaultAnalysisDate || '');
         const rollingPresetMatches =
           a1 === rollingPreset.aStart && a2 === rollingPreset.aEnd &&
           b1 === rollingPreset.bStart && b2 === rollingPreset.bEnd;
