@@ -65,12 +65,26 @@ function getRouteIdentity(row) {
   const customer = mapCustomer(normalizeText(row?.customer, '-'));
   const route = normalizeText(row?.route, '-');
   const vtype = normalizeText(row?.vtype, '-');
-  const parsed = parseTimedRouteParts(route);
+  const routeDesc = normalizeText(row?.routeDesc ?? row?.desc ?? '', '');
+  const routeName = normalizeText(row?.routeName ?? row?.name ?? '', '');
+  const parsedCandidate = [
+    { value: route, source: 'route' },
+    { value: routeDesc, source: 'routeDesc' },
+    { value: routeName, source: 'routeName' }
+  ]
+    .map(candidate => ({ ...candidate, parsed: parseTimedRouteParts(candidate.value) }))
+    .find(candidate => candidate.parsed);
+  const parsed = parsedCandidate?.parsed || null;
   const useFlashCore = parsed && (isFlashCustomerName(customer) || customer === '-');
   const routeCore = useFlashCore ? parsed.core : route;
   const routeVehicle = useFlashCore ? parsed.vehicle : vtype;
   const routePrefix = useFlashCore ? `${parsed.service}-${parsed.vehicle}` : '';
   const displayRoute = useFlashCore ? parsed.routeBeforeTime : route;
+  const routeDescription = useFlashCore
+    ? (parsedCandidate.source === 'route'
+      ? (cleanRouteDisplayText(routeDesc) || cleanRouteDisplayText(routeName) || displayRoute)
+      : (cleanRouteDisplayText(route) || cleanRouteDisplayText(routeName) || displayRoute))
+    : route;
   return {
     key: useFlashCore ? `${customer}|${vtype}|${routePrefix}|${routeCore}` : `${customer}|${vtype}|${route}`,
     customer,
@@ -80,13 +94,16 @@ function getRouteIdentity(row) {
     routeVehicle,
     routePrefix,
     displayRoute,
+    routeDescription,
     isFlashRoute: !!useFlashCore
   };
 }
 
 function routeIdentityKey(row) {
+  const identity = getRouteIdentity(row);
+  if (identity.isFlashRoute) return identity.key;
   if (row && row.routeKey) return String(row.routeKey);
-  return getRouteIdentity(row).key;
+  return identity.key;
 }
 
 function normalizeIsoDate(value) {
@@ -348,17 +365,24 @@ function routeDisplay(row) {
   }
   const desc = cleanRouteDisplayText(row?.routeDesc) || cleanRouteDisplayText(row?.desc);
   const identity = getRouteIdentity(row || {});
-  const routeCode = cleanRouteDisplayText(row?.routeGroup) ||
-    cleanRouteDisplayText(identity.displayRoute) ||
+  const routeDescription = cleanRouteDisplayText(identity.routeDescription);
+  const identityRouteCode = cleanRouteDisplayText(identity.displayRoute);
+  const fallbackRouteCode = cleanRouteDisplayText(row?.routeGroup) ||
+    identityRouteCode ||
     cleanRouteDisplayText(row?.displayRoute) ||
     cleanRouteDisplayText(row?.route);
+  const routeCode = identity.isFlashRoute
+    ? (identityRouteCode || fallbackRouteCode)
+    : fallbackRouteCode;
   const routeKeyText = String(row?.routeKey || '');
   const isFlashRouteLike = identity.isFlashRoute ||
     row?.isFlashRoute ||
     /(^|\|)(FD|LH|CPU|SHOP)-/.test(routeKeyText) ||
     /^(FD|LH|CPU|SHOP)-[^-]+-/.test(routeCode || '');
-  if (isFlashRouteLike && desc && routeCode) return `${desc} (${routeCode})`;
-  return desc ||
+  if (isFlashRouteLike && routeDescription && routeCode && routeDescription !== routeCode) return `${routeDescription} (${routeCode})`;
+  if (isFlashRouteLike && desc && routeCode && desc !== routeCode) return `${desc} (${routeCode})`;
+  return routeDescription ||
+    desc ||
     cleanRouteDisplayText(row?.displayName) ||
     cleanRouteDisplayText(row?.routeName) ||
     routeCode ||

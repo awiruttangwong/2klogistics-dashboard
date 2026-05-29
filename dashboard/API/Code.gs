@@ -1548,7 +1548,7 @@ function parseTripRow(row) {
   // Skip if essential fields are missing
   if (!date || !route || recv === null || pay === null) return null;
 
-  var routeIdentity = getRouteIdentity_(customer, vtype, route);
+  var routeIdentity = getRouteIdentity_(customer, vtype, route, routeDesc);
 
   return {
     date: date,
@@ -1605,11 +1605,26 @@ function parseTimedRouteParts_(route) {
   };
 }
 
-function getRouteIdentity_(customer, vtype, route) {
+function getRouteIdentity_(customer, vtype, route, routeDesc) {
   var c = mapCustomer(String(customer || '').trim() || '-');
   var v = String(vtype || '').trim() || '-';
   var r = String(route || '').trim() || '-';
-  var parsed = parseTimedRouteParts_(r);
+  var d = String(routeDesc || '').trim();
+  var candidates = [
+    { value: r, source: 'route' },
+    { value: d, source: 'routeDesc' }
+  ];
+  var parsed = null;
+  var parsedSource = 'route';
+  for (var i = 0; i < candidates.length; i++) {
+    var candidate = candidates[i];
+    var candidateParsed = parseTimedRouteParts_(candidate.value);
+    if (candidateParsed) {
+      parsed = candidateParsed;
+      parsedSource = candidate.source;
+      break;
+    }
+  }
   var useFlashCore = !!(parsed && (isFlashCustomer_(c) || c === '-'));
   if (!useFlashCore) {
     return {
@@ -1621,10 +1636,12 @@ function getRouteIdentity_(customer, vtype, route) {
       routeVehicle: v,
       routePrefix: '',
       displayRoute: r,
+      routeDescription: r,
       isFlashRoute: false
     };
   }
   var routePrefix = parsed.service + '-' + parsed.vehicle;
+  var routeDescription = parsedSource === 'route' ? (d || parsed.routeBeforeTime) : (r || parsed.routeBeforeTime);
   return {
     key: c + '|' + v + '|' + routePrefix + '|' + parsed.core,
     customer: c,
@@ -1634,20 +1651,37 @@ function getRouteIdentity_(customer, vtype, route) {
     routeVehicle: parsed.vehicle,
     routePrefix: routePrefix,
     displayRoute: parsed.routeBeforeTime,
+    routeDescription: routeDescription,
     isFlashRoute: true
   };
 }
 
 function getTripRouteKey_(trip) {
+  var identity = getRouteIdentity_(trip && trip.customer, trip && trip.vtype, trip && trip.route, trip && trip.routeDesc);
+  if (identity.isFlashRoute) return identity.key;
   if (trip && trip.routeKey) return trip.routeKey;
-  var identity = getRouteIdentity_(trip && trip.customer, trip && trip.vtype, trip && trip.route);
   return identity.key;
 }
 
 function getTripRouteDisplay_(trip) {
+  var identity = getRouteIdentity_(trip && trip.customer, trip && trip.vtype, trip && trip.route, trip && trip.routeDesc);
+  if (identity.isFlashRoute) return identity.displayRoute;
   if (trip && trip.routeGroup) return trip.routeGroup;
-  var identity = getRouteIdentity_(trip && trip.customer, trip && trip.vtype, trip && trip.route);
   return identity.displayRoute;
+}
+
+function ensureTripRouteIdentity_(trip) {
+  if (!trip) return trip;
+  var identity = getRouteIdentity_(trip.customer, trip.vtype, trip.route, trip.routeDesc);
+  if (identity.isFlashRoute || !trip.routeKey) {
+    trip.routeKey = identity.key;
+    trip.routeCore = identity.routeCore;
+    trip.routeVehicle = identity.routeVehicle;
+    trip.routePrefix = identity.routePrefix;
+    trip.routeGroup = identity.displayRoute;
+    trip.isFlashRoute = identity.isFlashRoute;
+  }
+  return trip;
 }
 
 function parseDate(str) {
@@ -2549,6 +2583,7 @@ function getTripsCache(start, end, route, page, limit, fields) {
     hasMore = (offset + rows.length) < total;
   }
 
+  rows = rows.map(function(t) { return ensureTripRouteIdentity_(t); });
   rows = projectTripFields_(rows, fields);
 
   return {
@@ -2658,7 +2693,7 @@ function getRoutesList() {
     var customer = mapCustomer(String(values[i][1] || ''));
     var vtype = String(values[i][2] || '');
     if (route) {
-      var identity = getRouteIdentity_(customer, vtype, route);
+      var identity = getRouteIdentity_(customer, vtype, route, routeDesc);
       var key = identity.key;
       routes[key] = routes[key] || { route: identity.displayRoute, routeKey: key, routeCore: identity.routeCore, routeVehicle: identity.routeVehicle, routePrefix: identity.routePrefix, routeDesc: routeDesc, customers: {}, variants: {} };
       if (!routes[key].routeDesc && routeDesc) routes[key].routeDesc = routeDesc;
