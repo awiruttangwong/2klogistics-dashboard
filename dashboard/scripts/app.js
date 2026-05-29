@@ -6943,7 +6943,7 @@ function buildDailyCompare(data) {
           <div class="dc-qa-case-strip">
             <span>${esc(fmtRange(stA.dateStart, stA.dateEnd))}</span>
             ${stripRefLabel}
-            <span>${anomCount ? `ต้องตรวจสอบ ${anomCount} เที่ยว` : 'ไม่พบความผิดปกติ'}</span>
+            <span class="${anomCount ? 'dc-qa-anom-badge' : 'dc-qa-normal-badge'}">${anomCount ? `ต้องตรวจสอบ ${anomCount} เที่ยว` : 'ไม่พบความผิดปกติ'}</span>
           </div>
           <div class="dc-qa-table-wrap">
             <table class="dc-qa-table">
@@ -7001,7 +7001,7 @@ function buildDailyCompare(data) {
             </div>
             <div class="dc-qa-head-actions"></div>
           </header>
-          <div class="dc-qa-case-strip"><span>${esc(_labelA)}</span><span>${esc(_labelB)}</span>${anomCount ? `<span>ต้องตรวจสอบ ${anomCount} คู่เปรียบเทียบ</span>` : '<span>คู่ข้อมูลปกติ</span>'}</div>
+          <div class="dc-qa-case-strip"><span>${esc(_labelA)}</span><span>${esc(_labelB)}</span><span class="${anomCount ? 'dc-qa-anom-badge' : 'dc-qa-normal-badge'}">${anomCount ? `ต้องตรวจสอบ ${anomCount} คู่เปรียบเทียบ` : 'คู่ข้อมูลปกติ'}</span></div>
           <div class="dc-qa-table-wrap">
             <table class="dc-qa-table dc-qa-pair-table">
               <thead><tr><th>วันที่หลัก</th><th>วันที่เปรียบเทียบ</th><th>พขร.</th><th>ราคาน้ำมัน</th><th>สำรองน้ำมัน</th><th>ราคารับ</th><th>ราคาจ่าย</th><th class="dc-qa-th-diff">ส่วนต่าง</th><th class="dc-qa-th-flag">ความผิดปกติ</th></tr></thead>
@@ -7046,7 +7046,7 @@ function buildDailyCompare(data) {
             </div>
             <div class="dc-qa-head-actions"></div>
           </header>
-          <div class="dc-qa-case-strip"><span>${esc(myLabel)}</span><span>ไม่มีคู่เปรียบเทียบอีกช่วง</span><span>${anomCount ? `ต้องตรวจสอบ ${anomCount} เที่ยว` : 'ไม่พบความผิดปกติเพิ่มเติม'}</span></div>
+          <div class="dc-qa-case-strip"><span>${esc(myLabel)}</span><span>ไม่มีคู่เปรียบเทียบอีกช่วง</span><span class="${anomCount ? 'dc-qa-anom-badge' : 'dc-qa-normal-badge'}">${anomCount ? `ต้องตรวจสอบ ${anomCount} เที่ยว` : 'ไม่พบความผิดปกติเพิ่มเติม'}</span></div>
           <div class="dc-qa-table-wrap">
             <table class="dc-qa-table dc-qa-single-table">
               <colgroup>

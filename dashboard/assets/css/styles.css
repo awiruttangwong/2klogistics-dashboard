@@ -5613,6 +5613,18 @@ body.sidebar-animating .chart-card {
   font-size: 12px;
 }
 
+.dc-qa-case-strip span.dc-qa-anom-badge {
+  color: #f87171 !important;
+  background: rgba(239, 68, 68, 0.10) !important;
+  border-color: rgba(239, 68, 68, 0.20) !important;
+}
+
+.dc-qa-case-strip span.dc-qa-normal-badge {
+  color: #34d399 !important;
+  background: rgba(16, 185, 129, 0.10) !important;
+  border-color: rgba(16, 185, 129, 0.20) !important;
+}
+
 /* First span = period label — slightly highlighted */
 .dc-qa-case-strip span:first-child {
   color: #a8b8d0;
