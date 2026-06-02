@@ -4576,8 +4576,8 @@ function buildDailyCompare(data) {
       const lbl = document.getElementById('ms_lbl_' + id);
       if (lbl) {
         if (vals.length === 0 || vals.length === total) lbl.textContent = 'ทั้งหมด';
-      else if (vals.length === 1) lbl.textContent = checked[0]?.closest('label')?.querySelector('span')?.textContent || vals[0];
-      else lbl.textContent = `เลือก ${vals.length} รายการ`;
+        else if (vals.length === 1) lbl.textContent = checked[0]?.closest('label')?.querySelector('span')?.textContent || vals[0];
+        else lbl.textContent = `เลือก ${vals.length} รายการ`;
       }
       dcUpdateFilters(false);
     };
@@ -4995,21 +4995,21 @@ function buildDailyCompare(data) {
           const cTrips = isSubset
             ? visibleRoutes.reduce((s, c) => s + countVisibleTripRows(c), 0)
             : sumAttr('data-trip-count');
-          const cRecv  = sumAttr('data-recv');
-          const cPay   = sumAttr('data-pay');
-          const cOil   = sumAttr('data-oil');
-          const cMargin= sumAttr('data-margin');
+          const cRecv = sumAttr('data-recv');
+          const cPay = sumAttr('data-pay');
+          const cOil = sumAttr('data-oil');
+          const cMargin = sumAttr('data-margin');
           const cAnoms = isSubset
             ? visibleRoutes.reduce((s, c) => s + countVisibleAnomRows(c), 0)
             : sumAttr('data-anom-count');
-          const cPct   = cRecv > 0 ? cMargin / cRecv * 100 : 0;
-          const tone   = cMargin >= 0 ? '#22c55e' : '#ef4444';
+          const cPct = cRecv > 0 ? cMargin / cRecv * 100 : 0;
+          const tone = cMargin >= 0 ? '#22c55e' : '#ef4444';
           const setText = (sel, val) => { const el = custCard.querySelector(sel); if (el) el.textContent = val; };
           setText('.js-cust-routes', String(visibleRoutes.length));
-          setText('.js-cust-trips',  String(cTrips));
-          setText('.js-cust-recv',   fmt(cRecv));
-          setText('.js-cust-pay',    fmt(cPay));
-          setText('.js-cust-oil',    fmt(cOil));
+          setText('.js-cust-trips', String(cTrips));
+          setText('.js-cust-recv', fmt(cRecv));
+          setText('.js-cust-pay', fmt(cPay));
+          setText('.js-cust-oil', fmt(cOil));
           // Margin/pct also need color update.
           const marginEl = custCard.querySelector('.js-cust-margin');
           if (marginEl) { marginEl.textContent = fmt(cMargin); marginEl.style.color = tone; }
@@ -5563,11 +5563,11 @@ function buildDailyCompare(data) {
       };
       // Color map for each status key — used by statusStyledCell.
       const statusColorMap = {
-        loss:     'DC2626',
-        oil50:    'EA580C',
-        payHigh:  'A855F7',
-        recvLow:  '3B82F6',
-        normal:   '16A34A'
+        loss: 'DC2626',
+        oil50: 'EA580C',
+        payHigh: 'A855F7',
+        recvLow: '3B82F6',
+        normal: '16A34A'
       };
       // statusRichCell: xlsx-js-style does NOT support per-run font colors (rich text).
       // Falls back to statusStyledCell using the highest-priority problem color.
@@ -5993,8 +5993,8 @@ function buildDailyCompare(data) {
             const cleaned = statuses.some(s => s !== 'normal') ? statuses.filter(s => s !== 'normal') : statuses;
             if (cleaned.includes('normal')) statusCount.normal++;
             else totalAnomCount++;
-            if (cleaned.includes('loss'))    statusCount.loss++;
-            if (cleaned.includes('oil50'))   statusCount.oil50++;
+            if (cleaned.includes('loss')) statusCount.loss++;
+            if (cleaned.includes('oil50')) statusCount.oil50++;
             if (cleaned.includes('payHigh')) statusCount.payHigh++;
             if (cleaned.includes('recvLow')) statusCount.recvLow++;
           });
@@ -6040,11 +6040,11 @@ function buildDailyCompare(data) {
         const totalForPct = _stA.trips || 0;
         const pctOf = (n) => totalForPct > 0 ? n / totalForPct : 0;
         const breakdown = [
-          ['ขาดทุน',                statusCount.loss,    'loss'],
-          ['สำรองน้ำมัน > 50%',      statusCount.oil50,   'oil50'],
-          ['ราคาจ่ายสูงผิดปกติ',     statusCount.payHigh, 'payHigh'],
-          ['ราคารับผิดปกติ',         statusCount.recvLow, 'recvLow'],
-          ['ปกติ',                  statusCount.normal,  'normal']
+          ['ขาดทุน', statusCount.loss, 'loss'],
+          ['สำรองน้ำมัน > 50%', statusCount.oil50, 'oil50'],
+          ['ราคาจ่ายสูงผิดปกติ', statusCount.payHigh, 'payHigh'],
+          ['ราคารับผิดปกติ', statusCount.recvLow, 'recvLow'],
+          ['ปกติ', statusCount.normal, 'normal']
         ];
         breakdown.forEach(([label, count, key]) => {
           const valueCell = key === 'normal'
@@ -6099,7 +6099,7 @@ function buildDailyCompare(data) {
         if (idx === 0) return { hpt: 32 };
         return {};
       });
-      
+
       const ws1ColHeaderRow = 2;
       const ws1Merges = [
         { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
@@ -6604,10 +6604,26 @@ function buildDailyCompare(data) {
           // Add the bottom Notes section (ย้ายไปด้านล่างสุด)
           const bottomStartIdx = wsData.length;
           wsData.push([]);
-          wsData.push([cCell('หมายเหตุ', { bold: true, sz: 10, color: '111827' })]);
-          wsData.push([cCell(filterSummaryText() + ' | หน้าที่ส่งออก: ' + sheetTitle, { color: '6B7280', sz: 9 })]);
-          wsData.push([cCell(statusInfo + ' | ส่งออกเฉพาะข้อมูลที่ผ่านตัวกรองบนหน้าจอ', { color: '374151', sz: 9 })]);
-          
+          const reviewerStartCol = 10; // K
+          const appendNoteRow = (noteCell, reviewerCell = null) => {
+            const row = [noteCell];
+            if (isTargetSheet) {
+              while (row.length < reviewerStartCol) row.push(cCell(''));
+              row.push(reviewerCell || cCell(''));
+              while (row.length < headers.length) row.push(cCell(''));
+            }
+            wsData.push(row);
+          };
+          const reviewerTitleCell = cCell('ผู้ตรวจสอบ', { bold: true, sz: 10, color: '111827', align: 'center', fill: 'EEF2FF' });
+          const reviewerSignCell = cCell('(                                      )', { sz: 11, color: '111827', align: 'center', fill: 'FFFFFF' });
+          const reviewerNameCell = cCell('ลงชื่อ', { sz: 9, color: '6B7280', align: 'center', fill: 'FFFFFF' });
+          const reviewerBlankCell = cCell('', { sz: 9, color: '6B7280', align: 'center', fill: 'FFFFFF' });
+          const reviewerDateCell = cCell('วันที่ ____ / ____ / ______', { sz: 9, color: '6B7280', align: 'center', fill: 'FFFFFF' });
+
+          appendNoteRow(cCell('หมายเหตุ', { bold: true, sz: 10, color: '111827' }), reviewerTitleCell);
+          appendNoteRow(cCell(filterSummaryText() + ' | หน้าที่ส่งออก: ' + sheetTitle, { color: '6B7280', sz: 9 }), reviewerSignCell);
+          appendNoteRow(cCell(statusInfo + ' | ส่งออกเฉพาะข้อมูลที่ผ่านตัวกรองบนหน้าจอ', { color: '374151', sz: 9 }), reviewerNameCell);
+
           const refLabelsList = refDayMaps.map(d => d.dateLabel).join(', ') || '-';
           const [refY, refM, refD] = _stA.dateStart.split('-').map(Number);
           const refSearchDay = (offset) => {
@@ -6615,9 +6631,15 @@ function buildDailyCompare(data) {
             return dt.getDate();
           };
           const refSearchText = refLabelsList !== '-'
-            ? ` (เปรียบเทียบเที่ยววิ่งอดีต: เริ่มหาจากวันที่ ${refSearchDay(1)} -> ไม่มีข้อมูล -> หาที่วันที่ ${refSearchDay(2)} -> ไม่มีข้อมูล -> หาที่วันที่ ${refSearchDay(3)})`
+            ? `(เปรียบเทียบเที่ยววิ่งอดีต: เริ่มหาจากวันที่ ${refSearchDay(1)} -> ไม่มีข้อมูล -> หาที่วันที่ ${refSearchDay(2)} -> ไม่มีข้อมูล -> หาที่วันที่ ${refSearchDay(3)})`
             : '';
-          wsData.push([cCell('ช่วงข้อมูลหลัก: ' + periodALabel + ' | ช่วงข้อมูลเปรียบเทียบ (ย้อนหลัง 3 วัน) ' + refLabelsList + refSearchText, { color: '374151', sz: 9 })]);
+          if (isTargetSheet && refLabelsList !== '-') {
+            appendNoteRow(cCell('ช่วงข้อมูลหลัก: ' + periodALabel, { color: '374151', sz: 9 }), reviewerBlankCell);
+            appendNoteRow(cCell('ช่วงข้อมูลเปรียบเทียบ (ย้อนหลัง 3 วัน) ' + refLabelsList, { color: '374151', sz: 9 }), reviewerDateCell);
+            appendNoteRow(cCell(refSearchText, { color: '374151', sz: 9 }), reviewerBlankCell);
+          } else {
+            appendNoteRow(cCell('ช่วงข้อมูลหลัก: ' + periodALabel + ' | ช่วงข้อมูลเปรียบเทียบ (ย้อนหลัง 3 วัน) ' + refLabelsList + (refSearchText ? ' ' + refSearchText : ''), { color: '374151', sz: 9 }), reviewerDateCell);
+          }
 
           const ws = XLSX.utils.aoa_to_sheet(wsData);
           ws['!cols'] = [
@@ -6649,7 +6671,12 @@ function buildDailyCompare(data) {
           ];
           const bottomEndIdx = wsData.length - 1;
           for (let r = bottomStartIdx + 1; r <= bottomEndIdx; r++) {
-            merges.push({ s: { r, c: 0 }, e: { r, c: headers.length - 1 } });
+            if (isTargetSheet) {
+              merges.push({ s: { r, c: 0 }, e: { r, c: reviewerStartCol - 1 } });
+              merges.push({ s: { r, c: reviewerStartCol }, e: { r, c: headers.length - 1 } });
+            } else {
+              merges.push({ s: { r, c: 0 }, e: { r, c: headers.length - 1 } });
+            }
           }
           ws['!merges'] = merges;
 
@@ -6669,10 +6696,10 @@ function buildDailyCompare(data) {
         // Order matches the on-screen status filter panel: ขาดทุน → สำรองน้ำมัน > 50% → ราคาจ่ายสูงผิดปกติ → ราคารับผิดปกติ
         // These sheets always export the requested tag regardless of UI toggle (by design).
         const statusSheets = [
-          { key: 'loss',     name: 'ขาดทุน' },
-          { key: 'oil50',    name: 'สำรองน้ำมัน > 50%' },
-          { key: 'payHigh',  name: 'ราคาจ่ายสูงผิดปกติ' },
-          { key: 'recvLow',  name: 'ราคารับผิดปกติ' }
+          { key: 'loss', name: 'ขาดทุน' },
+          { key: 'oil50', name: 'สำรองน้ำมัน > 50%' },
+          { key: 'payHigh', name: 'ราคาจ่ายสูงผิดปกติ' },
+          { key: 'recvLow', name: 'ราคารับผิดปกติ' }
         ];
         statusSheets.forEach(s => {
           const ws = buildSingleSheet(singleCases, s.name, s.key, null);
@@ -6904,9 +6931,9 @@ function buildDailyCompare(data) {
           <div><span>ราคาจ่ายรวม</span><b class="js-cust-pay">${fmt(pay)}</b></div>
           <div><span>สำรองน้ำมัน</span><b class="is-oil js-cust-oil">${fmt(oil)}</b></div>
           <div class="js-cust-anom-wrap">${anoms > 0
-            ? `<span>ความผิดปกติ</span><b class="js-cust-anoms dc-normal-metrics-anom">${anoms}</b>`
-            : `<span>ความผิดปกติ</span><b class="dc-normal-metrics-ok">ปกติ</b>`
-          }</div>
+          ? `<span>ความผิดปกติ</span><b class="js-cust-anoms dc-normal-metrics-anom">${anoms}</b>`
+          : `<span>ความผิดปกติ</span><b class="dc-normal-metrics-ok">ปกติ</b>`
+        }</div>
         </div>
         ${routeCardsHtml ? `<div class="dc-normal-route-list">${routeCardsHtml}</div>` : ''}
       </section>`;
