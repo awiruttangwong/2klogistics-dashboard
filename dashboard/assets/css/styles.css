@@ -832,6 +832,33 @@ body.sidebar-animating .chart-card {
   transition-property: opacity, transform !important;
 }
 
+body.sidebar-hover-transitioning .content.page-daily {
+  contain: layout paint;
+}
+
+body.sidebar-hover-transitioning .content.page-daily .dc-qa-page,
+body.sidebar-hover-transitioning .content.page-daily #dc_result,
+body.sidebar-hover-transitioning .content.page-daily .dc-normal-customer-section,
+body.sidebar-hover-transitioning .content.page-daily .dc-normal-customer-card,
+body.sidebar-hover-transitioning .content.page-daily .dc-qa-case,
+body.sidebar-hover-transitioning .content.page-daily .dc-qa-table-wrap {
+  contain: layout paint;
+}
+
+body.sidebar-hover-transitioning .content.page-daily *,
+body.sidebar-hover-transitioning .content.page-daily *::before,
+body.sidebar-hover-transitioning .content.page-daily *::after {
+  transition: none !important;
+  animation-play-state: paused !important;
+}
+
+body.sidebar-hover-transitioning .content.page-daily .dc-normal-customer-card,
+body.sidebar-hover-transitioning .content.page-daily .dc-qa-case,
+body.sidebar-hover-transitioning .content.page-daily .dc-qf-panel,
+body.sidebar-hover-transitioning .content.page-daily .dc-normal-summary {
+  box-shadow: none !important;
+}
+
 @media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
   body.sidebar-auto .sidebar {
     position: fixed;
@@ -840,7 +867,7 @@ body.sidebar-animating .chart-card {
     bottom: 0;
     width: 94px;
     transform: translate3d(0, 0, 0);
-    transition: width 0.2s cubic-bezier(0.2, 0, 0, 1);
+    transition: width 0.34s cubic-bezier(0.22, 1, 0.36, 1);
     box-shadow: none;
     contain: layout style paint;
   }
@@ -850,8 +877,8 @@ body.sidebar-animating .chart-card {
     width: calc(100% - 94px);
     min-width: 0;
     overflow: hidden;
-    transition: margin-left 0.2s cubic-bezier(0.2, 0, 0, 1),
-      width 0.2s cubic-bezier(0.2, 0, 0, 1);
+    transition: margin-left 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+      width 0.34s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   body.sidebar-auto.sidebar-hover-expanded .sidebar {
@@ -870,6 +897,7 @@ body.sidebar-animating .chart-card {
 
   body.sidebar-hover-transitioning .main {
     will-change: margin-left, width;
+    contain: layout paint;
   }
 
   body.sidebar-auto .sidebar-toggle {

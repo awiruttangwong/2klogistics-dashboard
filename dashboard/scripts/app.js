@@ -7911,7 +7911,7 @@ function initNav() {
   let pendingSidebarHoverExpanded = null;
   let sidebarPointerX = -1;
   let sidebarPointerY = -1;
-  const SIDEBAR_HOVER_TRANSITION_MS = 220;
+  const SIDEBAR_HOVER_TRANSITION_MS = 340;
   const hoverSidebarQuery = window.matchMedia?.('(min-width: 1024px) and (hover: hover) and (pointer: fine)');
   const setMobileSidebarOpen = (open) => {
     document.body.classList.toggle('sidebar-open', open);
@@ -7979,12 +7979,8 @@ function initNav() {
   };
 
   const isPointerInsideSidebar = () => {
-    if (!sidebarAutoEnabled || sidebarPointerX < 0 || sidebarPointerY < 0) return false;
-    const rect = sidebar.getBoundingClientRect();
-    return sidebarPointerX >= rect.left &&
-      sidebarPointerX <= rect.right &&
-      sidebarPointerY >= rect.top &&
-      sidebarPointerY <= rect.bottom;
+    if (!sidebarAutoEnabled) return false;
+    return sidebar.matches(':hover');
   };
 
   const setSidebarHoverExpanded = (expanded) => {
@@ -8132,6 +8128,8 @@ function showPage(idx) {
     </div>`;
   document.getElementById('pageBadge').textContent = `${idx + 1} / ${PAGES.length}`;
   const c = document.getElementById('content');
+  c.classList.toggle('page-daily', idx === 1);
+  c.classList.toggle('page-oil', idx === 2);
   // Toggle master-no-scroll class for fixed card grid
   if (idx === 0) {
     c.classList.add('master-no-scroll');
