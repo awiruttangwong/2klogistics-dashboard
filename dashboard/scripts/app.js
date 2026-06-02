@@ -5021,7 +5021,7 @@ function buildDailyCompare(data) {
             if (cAnoms > 0) {
               anomWrap.innerHTML = `<span>ความผิดปกติ</span><b class="js-cust-anoms dc-normal-metrics-anom">${cAnoms}</b>`;
             } else {
-              anomWrap.innerHTML = `<span>ความผิดปกติ</span><b class="dc-normal-metrics-ok">ปกติ</b>`;
+              anomWrap.innerHTML = `<span>ความผิดปกติ</span><b class="dc-normal-metrics-ok">ข้อมูลไม่เปลี่ยนแปลง</b>`;
             }
           }
         });
@@ -5115,7 +5115,7 @@ function buildDailyCompare(data) {
         oil50: 'สำรองน้ำมัน>50%',
         payHigh: 'ราคาจ่ายผิดปกติ',
         recvLow: 'ราคารับผิดปกติ',
-        normal: 'ปกติ'
+        normal: 'ข้อมูลไม่เปลี่ยนแปลง'
       };
     }
 
@@ -5536,7 +5536,7 @@ function buildDailyCompare(data) {
       const addPeriod = (title, periodLabel) => `${title} (${periodLabel || '-'})`;
       const qaStatusLabels = () => (typeof getCompareStatusLabelMap === 'function')
         ? getCompareStatusLabelMap()
-        : { loss: 'ขาดทุน', oil50: 'สำรองน้ำมัน>50%', payHigh: 'ราคาจ่ายผิดปกติ', recvLow: 'ราคารับผิดปกติ', normal: 'ปกติ' };
+        : { loss: 'ขาดทุน', oil50: 'สำรองน้ำมัน>50%', payHigh: 'ราคาจ่ายผิดปกติ', recvLow: 'ราคารับผิดปกติ', normal: 'ข้อมูลไม่เปลี่ยนแปลง' };
       const cleanStatuses = statuses => {
         const values = [...new Set((statuses && statuses.length ? statuses : ['normal']).map(s => s === 'oilHigh' ? 'payHigh' : s))];
         return values.some(s => s !== 'normal') ? values.filter(s => s !== 'normal') : values;
@@ -5549,7 +5549,7 @@ function buildDailyCompare(data) {
           (a, b) => statusPriorityOrder.indexOf(a) - statusPriorityOrder.indexOf(b)
         );
         // One problem per line so row height can be calculated from line count.
-        return sorted.map(k => labels[k] || k).join('\n') || labels.normal || 'ปกติ';
+        return sorted.map(k => labels[k] || k).join('\n') || labels.normal || 'ข้อมูลไม่เปลี่ยนแปลง';
       };
       // Returns number of display lines for a status cell (used to compute row height).
       const statusLineCount = statuses => cleanStatuses(statuses).length || 1;
@@ -5659,7 +5659,7 @@ function buildDailyCompare(data) {
         const routeCases = (st?.routes || []).map(route => {
           const trips = (st?.rows || []).filter(r => r.customer === route.customer && routeIdentityKey(r) === routeIdentityKey(route) && r.vtype === route.vtype)
             .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
-          const rows = trips.map(ra => ({ ra, statuses: dcQaTripStatuses(ra, trips) }))
+          const rows = trips.map(ra => ({ ra, statuses: dcQaTripStatuses(ra, [ra]) }))
             .sort((a, b) => {
               const rankA = dcQaStatusRank(a.statuses);
               const rankB = dcQaStatusRank(b.statuses);
@@ -5669,7 +5669,6 @@ function buildDailyCompare(data) {
           const anomCount = rows.filter(row => !row.statuses.includes('normal')).length;
           const statusSet = new Set();
           rows.forEach(row => row.statuses.forEach(s => statusSet.add(s)));
-          if (anomCount > 0) statusSet.delete('normal');
           return {
             route,
             rows,
@@ -5705,14 +5704,14 @@ function buildDailyCompare(data) {
           const anoms = items.reduce((sum, item) => sum + (item.anomCount || 0), 0);
           const customerRow = [
             cCell(customer, { bold: true, fill: 'DBEAFE' }),
-            cCell(routes.length + ' เส้นทาง · ' + trips + ' เที่ยว · ' + (anoms ? anoms + ' รายการผิดปกติ' : 'ปกติ'), { bold: true, fill: 'DBEAFE' }),
+            cCell(routes.length + ' เส้นทาง · ' + trips + ' เที่ยว · ' + (anoms ? anoms + ' รายการผิดปกติ' : 'ข้อมูลไม่เปลี่ยนแปลง'), { bold: true, fill: 'DBEAFE' }),
             cCell('', { fill: 'DBEAFE' }), cCell('', { fill: 'DBEAFE' }), cCell('', { fill: 'DBEAFE' }), cCell('', { fill: 'DBEAFE' }),
             cCell('', { fill: 'DBEAFE' }),
             cCell(oil, { numFmt: nTHB, align: 'right', bold: true, fill: 'DBEAFE' }),
             cCell(recv, { numFmt: nTHB, align: 'right', bold: true, fill: 'DBEAFE' }),
             cCell(pay, { numFmt: nTHB, align: 'right', bold: true, fill: 'DBEAFE' }),
             margin < 0 ? rCell(margin, { numFmt: nTHB, align: 'right', bold: true, fill: 'DBEAFE' }) : gCell(margin, { numFmt: nTHB, align: 'right', bold: true, fill: 'DBEAFE' }),
-            anoms ? rCell(anoms + ' รายการผิดปกติ', { fill: 'DBEAFE', bold: true }) : gCell('ปกติ', { fill: 'DBEAFE', bold: true })
+            anoms ? rCell(anoms + ' รายการผิดปกติ', { fill: 'DBEAFE', bold: true }) : gCell('ข้อมูลไม่เปลี่ยนแปลง', { fill: 'DBEAFE', bold: true })
           ];
           wsData.push(customerRow);
           rowIdx++;
@@ -5987,9 +5986,8 @@ function buildDailyCompare(data) {
           const routeKey = dcQaRouteKey(trips[0]);
           const refTripsForRoute = getRefForRouteSummary(routeKey);
           if (refTripsForRoute.length > 0) routesWithRefCount++;
-          const peers = refTripsForRoute.length > 0 ? [...trips, ...refTripsForRoute] : trips;
           trips.forEach(ra => {
-            const statuses = dcQaTripStatuses(ra, peers);
+            const statuses = dcQaTripStatuses(ra, dcQaStatusPeersForTrip(ra, refTripsForRoute));
             const cleaned = statuses.some(s => s !== 'normal') ? statuses.filter(s => s !== 'normal') : statuses;
             if (cleaned.includes('normal')) statusCount.normal++;
             else totalAnomCount++;
@@ -6044,7 +6042,7 @@ function buildDailyCompare(data) {
           ['สำรองน้ำมัน > 50%', statusCount.oil50, 'oil50'],
           ['ราคาจ่ายผิดปกติ', statusCount.payHigh, 'payHigh'],
           ['ราคารับผิดปกติ', statusCount.recvLow, 'recvLow'],
-          ['ปกติ', statusCount.normal, 'normal']
+          ['ข้อมูลไม่เปลี่ยนแปลง', statusCount.normal, 'normal']
         ];
         breakdown.forEach(([label, count, key]) => {
           const valueCell = key === 'normal'
@@ -6293,8 +6291,7 @@ function buildDailyCompare(data) {
             const routeKey = trips.length > 0 ? dcQaRouteKey(trips[0]) : null;
             const refResult = routeKey ? getRefForRoute(routeKey) : null;
             const refTripsForRoute = refResult ? refResult.trips : [];
-            const peers = refTripsForRoute.length > 0 ? [...trips, ...refTripsForRoute] : trips;
-            const rows = trips.map(ra => ({ ra, statuses: dcQaTripStatuses(ra, peers) }))
+            const rows = trips.map(ra => ({ ra, statuses: dcQaTripStatuses(ra, dcQaStatusPeersForTrip(ra, refTripsForRoute)) }))
               .sort((a, b) => {
                 const rankA = dcQaStatusRank(a.statuses);
                 const rankB = dcQaStatusRank(b.statuses);
@@ -6689,7 +6686,7 @@ function buildDailyCompare(data) {
 
         const singleCases = buildSingleCases();
         // Sheet 2: รายเส้นทางที่เปรียบเทียบ — applies the user's UI status toggles (Lens Filter).
-        // If user unchecks 'ปกติ', normal trips are excluded from this sheet (matches on-screen).
+        // If user unchecks 'ข้อมูลไม่เปลี่ยนแปลง', normal trips are excluded from this sheet (matches on-screen).
         const wsAll = buildSingleSheet(singleCases, 'รายเส้นทางที่เปรียบเทียบ', null, normalSelectedSet);
         XLSX.utils.book_append_sheet(wb, wsAll, 'รายเส้นทางที่เปรียบเทียบ');
         // Sheets 3-6: per-status filtered sheets (lens semantics — show only the picked tag).
@@ -6736,7 +6733,7 @@ function buildDailyCompare(data) {
         oil50: 'สำรองน้ำมัน>50%',
         payHigh: 'ราคาจ่ายผิดปกติ',
         recvLow: 'ราคารับผิดปกติ',
-        normal: 'ปกติ'
+        normal: 'ข้อมูลไม่เปลี่ยนแปลง'
       };
     }
 
@@ -6786,12 +6783,23 @@ function buildDailyCompare(data) {
       return d && d !== '-' && !/^null$/i.test(d) && !/^nan$/i.test(d);
     }
 
+    function dcQaDriverKey(driver) {
+      return String(driver || '').trim().toUpperCase();
+    }
+
+    function dcQaStatusPeersForTrip(trip, refTrips = []) {
+      const tripDriver = dcQaDriverKey(trip?.driver);
+      if (!tripDriver || tripDriver === '-' || !dcQaValidDriver(tripDriver)) return [trip];
+      const matchedRefs = (refTrips || []).filter(refTrip => dcQaDriverKey(refTrip?.driver) === tripDriver);
+      return matchedRefs.length ? [trip, ...matchedRefs] : [trip];
+    }
+
     // Status logic for single-trip mode (Normal view + Unmatched cards):
     // - loss: margin < 0
     // - oil50: oil > pay * 0.5
-    // - payHigh: trip.pay ต่างจาก pay ของแถวอื่นอย่างน้อย 1 แถวใน peer (card เดียวกัน)
-    // - recvLow: มีแถวอื่นใน peer ที่ราคาน้ำมันเท่ากัน แต่ recv ต่างกัน
-    // - normal: ไม่เข้าเงื่อนไขใดเลย
+    // - payHigh: trip.pay ต่างจาก pay ของ ref ที่จับคู่คนขับเดียวกัน
+    // - recvLow: ref ที่จับคู่คนขับเดียวกันมีราคาน้ำมันเท่ากัน แต่ recv ต่างกัน
+    // - normal: ไม่เข้าเงื่อนไขใดเลย หรือไม่มี ref ที่จับคู่ได้ในช่วงค้นหา
     // กรณีพิเศษ: ถ้า peer มีแค่ 1 แถว (รวมตัวเอง) จะไม่ติด payHigh / recvLow
     function dcQaTripStatuses(trip, peers = []) {
       const statuses = new Set();
@@ -6802,9 +6810,12 @@ function buildDailyCompare(data) {
         const tripPay = trip.pay || 0;
         const tripRecv = trip.recv || 0;
         const tripOilPrice = getOilPriceByDate(trip?.date);
+        const tripDriver = dcQaDriverKey(trip?.driver);
 
         for (const peer of peers) {
           if (peer === trip) continue;
+          const peerDriver = dcQaDriverKey(peer?.driver);
+          if (!dcQaValidDriver(tripDriver) || !dcQaValidDriver(peerDriver) || tripDriver !== peerDriver) continue;
           const peerPay = peer.pay || 0;
           if (hasNum(tripPay) && hasNum(peerPay) && (tripPay > peerPay || tripPay < peerPay)) statuses.add('payHigh');
           if (hasNum(tripOilPrice)) {
@@ -6930,7 +6941,7 @@ function buildDailyCompare(data) {
           <div><span>สำรองน้ำมัน</span><b class="is-oil js-cust-oil">${fmt(oil)}</b></div>
           <div class="js-cust-anom-wrap">${anoms > 0
           ? `<span>ความผิดปกติ</span><b class="js-cust-anoms dc-normal-metrics-anom">${anoms}</b>`
-          : `<span>ความผิดปกติ</span><b class="dc-normal-metrics-ok">ปกติ</b>`
+          : `<span>ความผิดปกติ</span><b class="dc-normal-metrics-ok">ข้อมูลไม่เปลี่ยนแปลง</b>`
         }</div>
         </div>
         ${routeCardsHtml ? `<div class="dc-normal-route-list">${routeCardsHtml}</div>` : ''}
@@ -6945,7 +6956,7 @@ function buildDailyCompare(data) {
              <b id="dc-summary-anoms-normal" class="dc-normal-stat-value">${totalAnoms}</b>
            </span>`
         : `<span class="dc-normal-stat-pill is-ok">
-             <span class="dc-normal-stat-label">ปกติ</span>
+             <span class="dc-normal-stat-label">ข้อมูลไม่เปลี่ยนแปลง</span>
              <b class="dc-normal-stat-value">—</b>
            </span>`;
       return `<header class="dc-normal-summary-head">
@@ -7195,9 +7206,14 @@ function buildDailyCompare(data) {
         const routeKey = trips.length > 0 ? dcQaRouteKey(trips[0]) : null;
         const refResult = (hasRef && routeKey) ? getRefForRoute(routeKey) : null;
         const refTripsForRoute = refResult ? refResult.trips : [];
-        const peers = refTripsForRoute.length > 0 ? [...trips, ...refTripsForRoute] : trips;
-
-        const rows = trips.map(ra => ({ ra, statuses: dcQaTripStatuses(ra, peers) }))
+        const rows = trips.map(ra => {
+          const peers = dcQaStatusPeersForTrip(ra, refTripsForRoute);
+          return {
+            ra,
+            statuses: dcQaTripStatuses(ra, peers),
+            hasMatchedDriverRef: peers.length > 1
+          };
+        })
           .sort((a, b) => {
             const rankA = dcQaStatusRank(a.statuses);
             const rankB = dcQaStatusRank(b.statuses);
@@ -7207,8 +7223,16 @@ function buildDailyCompare(data) {
         const anomCount = rows.filter(r => !r.statuses.includes('normal')).length;
         const statusSet = new Set();
         rows.forEach(r => r.statuses.forEach(s => statusSet.add(s)));
-        if (anomCount > 0) statusSet.delete('normal');
-        return { route, rows, anomCount, statuses: [...statusSet], severity: Math.max(...rows.map(r => dcQaStatusRank(r.statuses))), refTripsForRoute, refDateLabel: refResult ? refResult.dateLabel : null };
+        const statuses = [...statusSet];
+        const hasComparedStatus = statuses.some(s => s === 'payHigh' || s === 'recvLow');
+        const hasUnpairedIntrinsicAnomaly = rows.some(row => {
+          const rowStatuses = row.statuses || [];
+          const intrinsicOnly = rowStatuses.some(s => s === 'loss' || s === 'oil50') &&
+            !rowStatuses.some(s => s === 'payHigh' || s === 'recvLow');
+          return intrinsicOnly && !row.hasMatchedDriverRef;
+        });
+        const deferUnpairedIntrinsicCard = hasUnpairedIntrinsicAnomaly && !hasComparedStatus;
+        return { route, rows, anomCount, statuses, severity: Math.max(...rows.map(r => dcQaStatusRank(r.statuses))), refTripsForRoute, refDateLabel: refResult ? refResult.dateLabel : null, deferUnpairedIntrinsicCard };
       }).sort((a, b) => {
         if (b.severity !== a.severity) return b.severity - a.severity;
         if (b.anomCount !== a.anomCount) return b.anomCount - a.anomCount;
@@ -7224,7 +7248,7 @@ function buildDailyCompare(data) {
       const renderCaseCard = (item) => {
         const { route, rows, anomCount, statuses } = item;
         // Show ALL A-rows (no preview limit). User wants to see every trip.
-        const previewRows = anomCount ? rows.filter(r => !r.statuses.includes('normal')) : rows;
+        const previewRows = rows;
         const displayStyle = statuses.some(s => selectedNormalSet.has(s)) ? '' : 'display:none;';
 
         // Reference-day trips for this route (already sorted by date in the cases loop).
@@ -7297,16 +7321,15 @@ function buildDailyCompare(data) {
         // Strip label: show the actual ref date used for THIS route (may differ per route).
         const cardRefLabel = item.refDateLabel || null;
         let stripRefLabel = '';
-        if (hasRef) {
-          if (routeHasRefTrips && cardRefLabel) {
-            stripRefLabel = `<span class="dc-qa-ref-arrow">⇄</span><span class="dc-qa-ref-strip-label">${esc(cardRefLabel)} (${refTripsForCard.length} เที่ยว)</span>`;
-          } else {
-            // No ref data found for this route in any of the 3 candidate days.
-            const nearestLabel = labelRef || (refDayMaps.length > 0 ? refDayMaps[0].dateLabel : '');
-            stripRefLabel = nearestLabel
-              ? `<span class="dc-qa-ref-strip-label is-no-match" title="ไม่พบเส้นทางนี้ในวันก่อนหน้า (ลองถึง ${esc(nearestLabel)})">ไม่มีข้อมูลเปรียบเทียบ</span>`
-              : '';
-          }
+        if (routeHasRefTrips && cardRefLabel) {
+          stripRefLabel = `<span class="dc-qa-ref-arrow">⇄</span><span class="dc-qa-ref-strip-label">${esc(cardRefLabel)} (${refTripsForCard.length} เที่ยว)</span>`;
+        } else {
+          // No ref data found for this route in any of the 3 candidate days.
+          const nearestLabel = labelRef || (refDayMaps.length > 0 ? refDayMaps[0].dateLabel : '');
+          const titleText = nearestLabel
+            ? `ไม่พบเส้นทางนี้ในช่วงย้อนหลัง 3 วัน (เริ่มค้นหาจาก ${nearestLabel})`
+            : 'ไม่พบข้อมูลเปรียบเทียบในช่วงย้อนหลัง 3 วัน';
+          stripRefLabel = `<span class="dc-qa-ref-strip-label is-no-match" title="${esc(titleText)}">ไม่มีข้อมูลเปรียบเทียบในช่วงเวลา</span>`;
         }
 
         // Body rows: alternate A/ref rows for easier visual comparison.
@@ -7346,9 +7369,16 @@ function buildDailyCompare(data) {
         const pa = custOrder[String(a[0] || '').trim().toUpperCase()] ?? 999;
         const pb = custOrder[String(b[0] || '').trim().toUpperCase()] ?? 999;
         return pa !== pb ? pa - pb : String(a[0]).localeCompare(String(b[0]), 'th');
-      }).map(([customer, items]) => `<section class="dc-normal-customer-section" style="${items.some(item => item.statuses.some(s => selectedNormalSet.has(s))) ? '' : 'display:none;'}">
-        ${dcQaSingleCustomerSummaryCard(customer, items, items.map(renderCaseCard).join(''))}
-      </section>`).join('');
+      }).map(([customer, items]) => {
+        const sortedItems = items.slice().sort((a, b) => {
+          const pa = a.deferUnpairedIntrinsicCard ? 1 : 0;
+          const pb = b.deferUnpairedIntrinsicCard ? 1 : 0;
+          return pa - pb;
+        });
+        return `<section class="dc-normal-customer-section" style="${sortedItems.some(item => item.statuses.some(s => selectedNormalSet.has(s))) ? '' : 'display:none;'}">
+        ${dcQaSingleCustomerSummaryCard(customer, sortedItems, sortedItems.map(renderCaseCard).join(''))}
+      </section>`;
+      }).join('');
 
       return `<section class="dc-qa-page">
         <section class="dc-normal-summary">
@@ -7383,7 +7413,7 @@ function buildDailyCompare(data) {
             </div>
             <div class="dc-qa-head-actions"></div>
           </header>
-          <div class="dc-qa-case-strip"><span>${esc(_labelA)}</span><span>${esc(_labelB)}</span><span class="${anomCount ? 'dc-qa-anom-badge' : 'dc-qa-normal-badge'}">${anomCount ? `ต้องตรวจสอบ ${anomCount} คู่เปรียบเทียบ` : 'คู่ข้อมูลปกติ'}</span></div>
+          <div class="dc-qa-case-strip"><span>${esc(_labelA)}</span><span>${esc(_labelB)}</span><span class="${anomCount ? 'dc-qa-anom-badge' : 'dc-qa-normal-badge'}">${anomCount ? `ต้องตรวจสอบ ${anomCount} คู่เปรียบเทียบ` : 'ข้อมูลไม่เปลี่ยนแปลง'}</span></div>
           <div class="dc-qa-table-wrap">
             <table class="dc-qa-table dc-qa-pair-table">
               <thead><tr><th>วันที่หลัก</th><th>วันที่เปรียบเทียบ</th><th>พขร.</th><th>ราคาน้ำมัน</th><th>สำรองน้ำมัน</th><th>ราคารับ</th><th>ราคาจ่าย</th><th class="dc-qa-th-diff">ส่วนต่าง</th><th class="dc-qa-th-flag">ความผิดปกติ</th></tr></thead>
