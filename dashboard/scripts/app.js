@@ -5578,7 +5578,7 @@ function buildDailyCompare(data) {
       function statusStyledCell(statuses, opts) {
         const values = cleanStatuses(statuses);
         const text = statusText(values);
-        const base = { ...(opts || {}), wrap: true, valign: 'top' };
+        const base = { valign: 'top', wrap: true, ...(opts || {}) };
         const color = statusColor(values);
         if (color === 'loss') return rCell(text, base);
         if (color === 'oil50') return oCell(text, base);
@@ -6358,6 +6358,8 @@ function buildDailyCompare(data) {
           let maxPayLen = 10;     // 'ราคาจ่าย' (min 10)
           let maxMarginLen = 10;  // 'ส่วนต่าง' (min 10)
 
+          const isTargetSheet = ['ขาดทุน', 'สำรองน้ำมัน > 50%', 'ราคาจ่ายสูงผิดปกติ', 'ราคารับผิดปกติ'].includes(sheetTitle);
+          let maxStatusLen = 14;
           cases.forEach(item => {
             let visibleRows;
             if (statusFilter) {
@@ -6396,6 +6398,25 @@ function buildDailyCompare(data) {
               const mar = (r.margin == null || isNaN(r.margin)) ? ((r.recv || 0) - (r.pay || 0) - (r.oil || 0)) : r.margin;
               const marginStr = fmtMoney(mar);
               if (marginStr.length > maxMarginLen) maxMarginLen = marginStr.length;
+
+              if (isTargetSheet) {
+                let displayStatuses;
+                if (statusFilter) {
+                  displayStatuses = [statusFilter];
+                } else if (userFilterSet) {
+                  const ss = cleanStatuses(entry.statuses || ['normal']);
+                  const filtered = ss.filter(s => userFilterSet.has(s));
+                  displayStatuses = filtered.length ? filtered : ss;
+                } else {
+                  displayStatuses = entry.statuses || ['normal'];
+                }
+                const statusTxt = statusText(displayStatuses);
+                if (statusTxt) {
+                  statusTxt.split('\n').forEach(line => {
+                    if (line.length + 3 > maxStatusLen) maxStatusLen = line.length + 3;
+                  });
+                }
+              }
             });
 
             (item.refTripsForRoute || []).forEach(refTrip => {
@@ -6521,6 +6542,8 @@ function buildDailyCompare(data) {
                   displayStatuses = entry.statuses || ['normal'];
                 }
                 const zf = (rowIdx % 2 === 0) ? 'F9FAFB' : null;
+                const isTargetSheet = ['ขาดทุน', 'สำรองน้ำมัน > 50%', 'ราคาจ่ายสูงผิดปกติ', 'ราคารับผิดปกติ'].includes(sheetTitle);
+                const colLValign = isTargetSheet ? 'center' : 'top';
                 const row = [
                   cCell(r.customer || '-', { fill: zf }),
                   cCell(routeDisplay(r), { fill: zf }),
@@ -6533,7 +6556,7 @@ function buildDailyCompare(data) {
                   cCell(fmtMoney(r.recv), { align: 'right', fill: zf }),
                   cCell(fmtMoney(r.pay), { align: 'right', fill: zf }),
                   mar < 0 ? rCell(fmtMoney(mar), { align: 'right', fill: zf }) : gCell(fmtMoney(mar), { align: 'right', fill: zf }),
-                  statusRichCell(displayStatuses, { fill: zf, align: 'left', wrap: true, valign: 'top' }),
+                  statusRichCell(displayStatuses, { fill: zf, align: 'left', wrap: true, valign: colLValign }),
                   cCell('', { fill: zf })
                 ];
                 wsData.push(row);
@@ -6592,7 +6615,7 @@ function buildDailyCompare(data) {
           ws['!cols'] = [
             { wch: 12 }, { wch: maxRouteLen }, { wch: 12 }, { wch: 18 },
             { wch: 13 }, { wch: 18 }, { wch: maxOilLen }, { wch: maxReserveLen },
-            { wch: maxRecvLen }, { wch: maxPayLen }, { wch: maxMarginLen }, { wch: 24 }, { wch: 16 }
+            { wch: maxRecvLen }, { wch: maxPayLen }, { wch: maxMarginLen }, { wch: isTargetSheet ? maxStatusLen : 24 }, { wch: 16 }
           ];
 
           // Row heights: header rows = default; group header = 20pt; data row proportional to status lines.
