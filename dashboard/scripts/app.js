@@ -815,35 +815,57 @@ function loadScriptOnce(src, globalName) {
   if (LEGACY_SCRIPT_PROMISES[src]) return LEGACY_SCRIPT_PROMISES[src];
   LEGACY_SCRIPT_PROMISES[src] = new Promise((resolve, reject) => {
     const script = document.createElement('script');
+    let settled = false;
+    const timer = setTimeout(() => {
+      fail(new Error(`timeout loading ${src}`));
+    }, 30000);
+    const cleanup = () => {
+      clearTimeout(timer);
+      script.onload = null;
+      script.onerror = null;
+    };
+    const fail = (err) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      delete LEGACY_SCRIPT_PROMISES[src];
+      reject(err);
+    };
+    const succeed = (value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
     script.src = src;
     script.async = true;
     script.onload = () => {
       if (!globalName || typeof window[globalName] !== 'undefined') {
-        resolve(globalName ? window[globalName] : true);
+        succeed(globalName ? window[globalName] : true);
       } else {
-        reject(new Error(`global ${globalName} not found after loading ${src}`));
+        fail(new Error(`global ${globalName} not found after loading ${src}`));
       }
     };
-    script.onerror = () => reject(new Error(`failed to load ${src}`));
+    script.onerror = () => fail(new Error(`failed to load ${src}`));
     document.head.appendChild(script);
   });
   return LEGACY_SCRIPT_PROMISES[src];
 }
 
 async function loadLegacySummaryData() {
-  await loadScriptOnce('data/data.js', 'DATA_JSON');
+  await loadScriptOnce('data/data.js');
   if (typeof DATA_JSON === 'undefined') throw new Error('DATA_JSON unavailable');
   return deepClone(DATA_JSON);
 }
 
 async function loadLegacyTripsData() {
-  await loadScriptOnce('data/fraud_data.js', 'FRAUD_DATA');
+  await loadScriptOnce('data/fraud_data.js');
   if (typeof FRAUD_DATA === 'undefined' || !Array.isArray(FRAUD_DATA)) throw new Error('FRAUD_DATA unavailable');
   return FRAUD_DATA;
 }
 
 async function loadLegacyOilData() {
-  await loadScriptOnce('data/oil-price-data.js', 'OIL_PRICE_DATA');
+  await loadScriptOnce('data/oil-price-data.js');
   if (typeof OIL_PRICE_DATA === 'undefined') throw new Error('OIL_PRICE_DATA unavailable');
   return deepClone(OIL_PRICE_DATA);
 }
@@ -5424,6 +5446,23 @@ function buildDailyCompare(data) {
         left: { style: 'thin', color: { rgb: 'E5E7EB' } },
         right: { style: 'thin', color: { rgb: 'E5E7EB' } }
       };
+      const routeGroupOuterBorderSide = { style: 'thin', color: { rgb: '595959' } };
+      function applyRouteGroupOuterBorder(row) {
+        if (!Array.isArray(row) || row.length === 0) return row;
+        row.forEach((cell, idx) => {
+          if (!cell) return;
+          if (!cell.s) cell.s = {};
+          const current = cell.s.border || {};
+          cell.s.border = {
+            ...current,
+            top: routeGroupOuterBorderSide,
+            bottom: routeGroupOuterBorderSide,
+            ...(idx === 0 ? { left: routeGroupOuterBorderSide } : {}),
+            ...(idx === row.length - 1 ? { right: routeGroupOuterBorderSide } : {})
+          };
+        });
+        return row;
+      }
       function hCell(v) {
         return { v: v, s: { font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 }, fill: { fgColor: { rgb: '1F2937' }, patternType: 'solid' }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: allBorders } };
       }
@@ -6482,6 +6521,7 @@ function buildDailyCompare(data) {
               cCell('', { fill: 'DBEAFE' })     // F — merged with E
             ];
             while (top.length < headers.length) top.push(cCell('', { fill: 'DBEAFE' }));
+            applyRouteGroupOuterBorder(top);
             groupHeaderRows.push(wsData.length);
             wsData.push(top);
             rowIdx++;
