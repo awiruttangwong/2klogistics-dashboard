@@ -9,8 +9,11 @@ const COLORS = ['#3b82f6', '#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4'
 let DATA = null, currentPage = 0;
 const DASHBOARD_API_CONFIG = window.DASHBOARD_API_CONFIG || {};
 const API_BASE_URL = String(DASHBOARD_API_CONFIG.baseUrl || '').trim();
-const API_TIMEOUT_MS = 20000;
-const API_TRIPS_TIMEOUT_MS = 45000;
+const API_TIMEOUT_MS = readPositiveNumber(DASHBOARD_API_CONFIG.timeoutMs, 20000);
+const API_SUMMARY_TIMEOUT_MS = readPositiveNumber(DASHBOARD_API_CONFIG.summaryTimeoutMs, 30000);
+const API_SUMMARY_RETRY_TIMEOUT_MS = readPositiveNumber(DASHBOARD_API_CONFIG.summaryRetryTimeoutMs, 12000);
+const API_TRIPS_TIMEOUT_MS = readPositiveNumber(DASHBOARD_API_CONFIG.tripsTimeoutMs, 45000);
+const API_RETRY_DELAY_MS = readPositiveNumber(DASHBOARD_API_CONFIG.retryDelayMs, 700);
 const API_CACHE = { summary: null, trips: null, oil: null };
 const LEGACY_SCRIPT_PROMISES = {};
 let TRIPS_READY = false;
@@ -24,6 +27,11 @@ const DATA_SOURCE_STATE = {
 
 function isApiEnabled() {
   return API_BASE_URL.length > 0;
+}
+
+function readPositiveNumber(value, fallback) {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? num : fallback;
 }
 
 function deepClone(value) {
@@ -190,7 +198,10 @@ async function fetchJsonWithTimeout(url, timeoutMs = API_TIMEOUT_MS) {
     return await res.json();
   } catch (err) {
     if (err && err.name === 'AbortError') {
-      throw new Error(`request timeout after ${timeoutMs}ms`);
+      const timeoutErr = new Error(`request timeout after ${timeoutMs}ms`);
+      timeoutErr.code = 'REQUEST_TIMEOUT';
+      timeoutErr.timeoutMs = timeoutMs;
+      throw timeoutErr;
     }
     throw err;
   } finally {
@@ -210,6 +221,32 @@ async function apiGet(action, params = {}, timeoutMs = API_TIMEOUT_MS) {
   const payload = await fetchJsonWithTimeout(url.toString(), timeoutMs);
   if (payload && payload.error) throw new Error(payload.error);
   return payload;
+}
+
+async function apiGetWithRetry(action, params = {}, timeouts = [API_TIMEOUT_MS], retryDelayMs = API_RETRY_DELAY_MS) {
+  let lastErr = null;
+  for (let attempt = 0; attempt < timeouts.length; attempt++) {
+    try {
+      return await apiGet(action, params, timeouts[attempt]);
+    } catch (err) {
+      lastErr = err;
+      if (attempt < timeouts.length - 1) {
+        console.warn(`${action} API retry ${attempt + 1}/${timeouts.length - 1}:`, err.message);
+        await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+      }
+    }
+  }
+  throw lastErr || new Error(`${action} api failed`);
+}
+
+function describeDataLoadError(err, sourceLabel = 'API') {
+  const msg = String(err?.message || err || 'unknown error');
+  const timeoutMs = err?.timeoutMs || Number(msg.match(/request timeout after (\d+)ms/)?.[1]);
+  if (err?.code === 'REQUEST_TIMEOUT' || Number.isFinite(timeoutMs)) {
+    const seconds = Math.round(timeoutMs / 1000);
+    return `${sourceLabel} timeout หลังรอ ${seconds} วินาที`;
+  }
+  return msg;
 }
 
 // Helpers for multi-month readiness
@@ -8362,13 +8399,13 @@ async function loadSummarySource() {
   if (API_CACHE.summary) return deepClone(API_CACHE.summary);
   if (isApiEnabled()) {
     try {
-      const payload = await apiGet('summary');
+      const payload = await apiGetWithRetry('summary', {}, [API_SUMMARY_TIMEOUT_MS, API_SUMMARY_RETRY_TIMEOUT_MS]);
       API_CACHE.summary = payload;
       noteDataSource('summary', 'api');
       return deepClone(payload);
     } catch (err) {
       console.warn('Summary API fallback to static data:', err.message);
-      noteDataSource('summary', 'static', `summary fallback: ${err.message}`);
+      noteDataSource('summary', 'static', `summary fallback: ${describeDataLoadError(err, 'summary API')}`);
     }
   }
   if (!isApiEnabled()) noteDataSource('summary', 'static');
@@ -8416,7 +8453,7 @@ async function loadTripsSource() {
       return deepClone(trips);
     } catch (err) {
       console.warn('Trips API fallback to static data:', err.message);
-      noteDataSource('trips', 'static', `trips fallback: ${err.message}`);
+      noteDataSource('trips', 'static', `trips fallback: ${describeDataLoadError(err, 'trips API')}`);
     }
   }
   if (!isApiEnabled()) noteDataSource('trips', 'static');
@@ -8450,7 +8487,7 @@ async function loadOilSource() {
       return deepClone(payload);
     } catch (err) {
       console.warn('Oil API fallback to static data:', err.message);
-      noteDataSource('oil', 'static', `oil fallback: ${err.message}`);
+      noteDataSource('oil', 'static', `oil fallback: ${describeDataLoadError(err, 'oil API')}`);
     }
   }
   if (!isApiEnabled()) noteDataSource('oil', 'static');
