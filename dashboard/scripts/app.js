@@ -4930,10 +4930,10 @@ function buildDailyCompare(data) {
         card.style.display = visible ? '' : 'none';
       });
 
-      // Lens filter for normal mode: when user selects a SUBSET of statuses,
+      // Lens filter for normal/anomaly mode: when user selects a SUBSET of statuses,
       // hide badges that don't match the selection (focus on the picked status only).
       // When all options are selected (default), show every badge as usual.
-      if (modeKey === 'normal') {
+      if (modeKey === 'normal' || modeKey === 'anomaly') {
         const isSubset = selected.length > 0 && selected.length < optionKeys.length;
         cards.forEach(card => {
           if (card.style.display === 'none') return;
@@ -4952,6 +4952,22 @@ function buildDailyCompare(data) {
             const visBadges = tr.querySelectorAll('.dc-qa-badge[data-status-key]:not([style*="display: none"])');
             tr.style.display = (isSubset && visBadges.length === 0) ? 'none' : '';
           });
+        });
+      }
+
+      // Apply lens filter to the open modal if exists
+      const modal = document.getElementById('dc_anom_modal');
+      if (modal && modeKey === 'anomaly') {
+        const isSubset = selected.length > 0 && selected.length < optionKeys.length;
+        const badges = modal.querySelectorAll('.dc-qa-badge[data-status-key]');
+        badges.forEach(b => {
+          const key = b.getAttribute('data-status-key');
+          const norm = key === 'oilHigh' ? 'payHigh' : key;
+          b.style.display = (isSubset && !selectedSet.has(norm)) ? 'none' : '';
+        });
+        modal.querySelectorAll('.dc-qa-table tbody tr').forEach(tr => {
+          const visBadges = tr.querySelectorAll('.dc-qa-badge[data-status-key]:not([style*="display: none"])');
+          tr.style.display = (isSubset && visBadges.length === 0) ? 'none' : '';
         });
       }
 
@@ -5044,7 +5060,22 @@ function buildDailyCompare(data) {
       } else if (modeKey === 'anomaly') {
         const routesEl = document.getElementById('dc-summary-routes-anomaly');
         const anomsEl = document.getElementById('dc-summary-anoms-anomaly');
-        const visibleAnoms = visibleCards.reduce((sum, card) => sum + (Number(card.getAttribute('data-anom-count')) || 0), 0);
+        const isSubset = selected.length > 0 && selected.length < optionKeys.length;
+        const visibleAnoms = isSubset
+          ? visibleCards.reduce((sum, card) => {
+              const idx = Number(card.getAttribute('data-card-idx'));
+              const cardData = window._anomalyCardsData?.[idx];
+              if (!cardData) return sum;
+              const cardAnoms = cardData.anomRows.filter(row => {
+                const hasSelectedStatus = row.statuses.some(s => {
+                  const norm = s === 'oilHigh' ? 'payHigh' : s;
+                  return selectedSet.has(norm);
+                });
+                return hasSelectedStatus && !row.statuses.includes('normal');
+              }).length;
+              return sum + cardAnoms;
+            }, 0)
+          : visibleCards.reduce((sum, card) => sum + (Number(card.getAttribute('data-anom-count')) || 0), 0);
         if (routesEl) routesEl.textContent = String(visibleCards.length);
         if (anomsEl) anomsEl.textContent = String(visibleAnoms);
       } else if (modeKey === 'unmatched_a' || modeKey === 'unmatched_b') {
@@ -5186,8 +5217,6 @@ function buildDailyCompare(data) {
 
     function renderQFBarModern() {
       const isAnomaly = _viewMode === 'anomaly';
-      const isUnmatchedA = _viewMode === 'unmatched_a';
-      const isUnmatchedB = _viewMode === 'unmatched_b';
       const compareAlertIcon = '<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#EFEFEF"><path d="M80-560q0-100 44.5-183.5T244-882l47 64q-60 44-95.5 111T160-560H80Zm720 0q0-80-35.5-147T669-818l47-64q75 55 119.5 138.5T880-560h-80ZM160-200v-80h80v-280q0-83 50-147.5T420-792v-28q0-25 17.5-42.5T480-880q25 0 42.5 17.5T540-820v28q80 20 130 84.5T720-560v280h80v80H160Zm320-300Zm0 420q-33 0-56.5-23.5T400-160h160q0 33-23.5 56.5T480-80ZM320-280h320v-280q0-66-47-113t-113-47q-66 0-113 47t-47 113v280Z"/></svg>';
       return `<section class="dc-qf-panel">
         <div class="dc-qf-head">
@@ -5204,25 +5233,7 @@ function buildDailyCompare(data) {
             </span>
             <span class="dc-qf-content">
               <span class="dc-qf-label">รายเส้นทางที่ถูกเปรียบเทียบ</span>
-              <span class="dc-qf-sub">แสดงเส้นทางที่มีสัญญาณผิดปกติจากข้อมูลเปรียบเทียบทั้งสองช่วง</span>
-            </span>
-          </button>
-          <button id="qf_unmatched_a" class="dc-qf-btn${isUnmatchedA ? ' active' : ''}">
-            <span class="dc-qf-icon" aria-hidden="true">
-              ${compareAlertIcon}
-            </span>
-            <span class="dc-qf-content">
-              <span class="dc-qf-label">รายเส้นทางที่ไม่ถูกเปรียบเทียบ: ${esc(_labelA)}</span>
-              <span class="dc-qf-sub">พบเฉพาะช่วงแรก และไม่มีคู่เปรียบเทียบในอีกช่วงเวลา</span>
-            </span>
-          </button>
-          <button id="qf_unmatched_b" class="dc-qf-btn${isUnmatchedB ? ' active' : ''}">
-            <span class="dc-qf-icon" aria-hidden="true">
-              ${compareAlertIcon}
-            </span>
-            <span class="dc-qf-content">
-              <span class="dc-qf-label">รายเส้นทางที่ไม่ถูกเปรียบเทียบ: ${esc(_labelB)}</span>
-              <span class="dc-qf-sub">พบเฉพาะช่วงหลัง และไม่มีคู่เปรียบเทียบจากช่วงก่อนหน้า</span>
+              <span class="dc-qf-sub">แสดงเส้นทางที่พบสัญญาณผิดปกติ โดยเปรียบเทียบเที่ยววิ่งบนเส้นทางเดียวกันของ พขร. คนเดียวกันระหว่างสองช่วงเวลา</span>
             </span>
           </button>
         </div>
@@ -5231,8 +5242,6 @@ function buildDailyCompare(data) {
 
     function bindQFEvents() {
       document.getElementById('qf_anomaly')?.addEventListener('click', () => { _viewMode = 'anomaly'; renderAll({ animate: false }); });
-      document.getElementById('qf_unmatched_a')?.addEventListener('click', () => { _viewMode = 'unmatched_a'; renderAll({ animate: false }); });
-      document.getElementById('qf_unmatched_b')?.addEventListener('click', () => { _viewMode = 'unmatched_b'; renderAll({ animate: false }); });
     }
 
     function renderCard(st, side, label) {
@@ -6055,20 +6064,12 @@ function buildDailyCompare(data) {
       const anomalySelectedRaw = (typeof getSelectedCompareStatuses === 'function')
         ? getSelectedCompareStatuses('anomaly', exportStatusOptionKeys)
         : exportStatusOptionKeys;
-      const unmatchedASelectedRaw = (typeof getSelectedCompareStatuses === 'function')
-        ? getSelectedCompareStatuses('unmatched_a', exportStatusOptionKeys)
-        : exportStatusOptionKeys;
-      const unmatchedBSelectedRaw = (typeof getSelectedCompareStatuses === 'function')
-        ? getSelectedCompareStatuses('unmatched_b', exportStatusOptionKeys)
-        : exportStatusOptionKeys;
       // Single-mode (normal view) status filter — controls which trips appear in the
       // "รายเส้นทางที่เปรียบเทียบ" sheet (mirrors the on-screen toggle behaviour).
       const normalSelectedRaw = (typeof getSelectedCompareStatuses === 'function')
         ? getSelectedCompareStatuses('normal', exportStatusOptionKeys)
         : exportStatusOptionKeys;
       const anomalySelectedSet = new Set(anomalySelectedRaw);
-      const unmatchedASelectedSet = new Set(unmatchedASelectedRaw);
-      const unmatchedBSelectedSet = new Set(unmatchedBSelectedRaw);
       const normalSelectedSet = new Set(normalSelectedRaw);
       const matchesStatusFilter = (card, selectedSet) => {
         const statuses = (card && Array.isArray(card.statuses) && card.statuses.length) ? card.statuses : ['normal'];
@@ -6081,23 +6082,13 @@ function buildDailyCompare(data) {
 
       // Pre-compute filtered cards (used by both Sheet 1 summary and per-view sheets).
       let anomalyCardsAll = [], anomalyCards = [];
-      let unmatchedACardsAll = [], unmatchedACards = [];
-      let unmatchedBCardsAll = [], unmatchedBCards = [];
       if (!_isSingleMode && _stB) {
         anomalyCardsAll = buildAnomalyExportCards(_stA, _stB);
         anomalyCards = anomalyCardsAll.filter(card => matchesStatusFilter(card, anomalySelectedSet));
-        unmatchedACardsAll = buildUnmatchedExportCards(_stA.rows, _stB.rows);
-        unmatchedBCardsAll = buildUnmatchedExportCards(_stB.rows, _stA.rows);
-        unmatchedACards = unmatchedACardsAll.filter(card => matchesStatusFilter(card, unmatchedASelectedSet));
-        unmatchedBCards = unmatchedBCardsAll.filter(card => matchesStatusFilter(card, unmatchedBSelectedSet));
       }
 
       const sumAnomalyPairs = anomalyCards.reduce((s, c) => s + (c.rows || []).length, 0);
       const sumAnomalyAnoms = anomalyCards.reduce((s, c) => s + (c.rows || []).filter(r => !(r.statuses || []).includes('normal')).length, 0);
-      const sumUnmatchedATrips = unmatchedACards.reduce((s, c) => s + (c.rows || []).length, 0);
-      const sumUnmatchedAAnoms = unmatchedACards.reduce((s, c) => s + (c.rows || []).filter(r => !(r.statuses || []).includes('normal')).length, 0);
-      const sumUnmatchedBTrips = unmatchedBCards.reduce((s, c) => s + (c.rows || []).length, 0);
-      const sumUnmatchedBAnoms = unmatchedBCards.reduce((s, c) => s + (c.rows || []).filter(r => !(r.statuses || []).includes('normal')).length, 0);
 
       // ─── Sheet 1: สรุปผลดำเนินงาน (template-driven) ─────────────────────────────
       const ws1Data = [];
@@ -6212,11 +6203,11 @@ function buildDailyCompare(data) {
         const dT = (_stA.trips || 0) - (_stB.trips || 0);
         const dPct = ((_stA.pct || 0) - (_stB.pct || 0)) / 100;
         // Counts derived from filter-applied sheets so user sees what they actually exported.
-        const totalRoutesExported = anomalyCards.length + unmatchedACards.length + unmatchedBCards.length;
-        const totalAnomCount = sumAnomalyAnoms + sumUnmatchedAAnoms + sumUnmatchedBAnoms;
+        const totalRoutesExported = anomalyCards.length;
+        const totalAnomCount = sumAnomalyAnoms;
         const rows = [
           [cCell('จำนวนเส้นทางที่ส่งออก', { bold: true }), cCell(totalRoutesExported, { numFmt: '#,##0', align: 'right' }), cCell('-', { align: 'right' }), cCell('-', { align: 'right' })],
-          [cCell('จำนวนคู่/เที่ยวที่ส่งออก', { bold: true }), cCell(sumAnomalyPairs + sumUnmatchedATrips, { numFmt: '#,##0', align: 'right' }), cCell(sumAnomalyPairs + sumUnmatchedBTrips, { numFmt: '#,##0', align: 'right' }), cCell('-', { align: 'right' })],
+          [cCell('จำนวนคู่/เที่ยวที่ส่งออก', { bold: true }), cCell(sumAnomalyPairs, { numFmt: '#,##0', align: 'right' }), cCell(sumAnomalyPairs, { numFmt: '#,##0', align: 'right' }), cCell('-', { align: 'right' })],
           [cCell('จำนวนรายการที่มีความผิดปกติ', { bold: true }), cCell(totalAnomCount, { numFmt: '#,##0', align: 'right' }), cCell('-', { align: 'right' }), cCell('-', { align: 'right' })],
           [cCell('จำนวนเที่ยว (รวมทั้งช่วง)', { bold: true }), cCell(_stA.trips, { numFmt: '#,##0', align: 'right' }), cCell(_stB.trips, { numFmt: '#,##0', align: 'right' }), gCell(dT, { numFmt: '#,##0', align: 'right' })],
           [cCell('ราคารับรวม', { bold: true }), cCell(fmtNum(_stA.recv), { numFmt: nTHB, align: 'right' }), cCell(fmtNum(_stB.recv), { numFmt: nTHB, align: 'right' }), dR < 0 ? rCell(fmtNum(dR), { numFmt: nTHB, align: 'right' }) : gCell(fmtNum(dR), { numFmt: nTHB, align: 'right' })],
@@ -6236,8 +6227,6 @@ function buildDailyCompare(data) {
         ws1Data.push([cCell('สถานะที่เลือก (มุมมองปกติ): ' + formatStatusLabels(normalSelectedRaw), { color: '374151', sz: 9 })]);
       } else {
         ws1Data.push([cCell('สถานะที่เลือก (รายเส้นทางที่ถูกเปรียบเทียบ): ' + formatStatusLabels(anomalySelectedRaw), { color: '374151', sz: 9 })]);
-        ws1Data.push([cCell('สถานะที่เลือก (ไม่ถูกเปรียบเทียบช่วงแรก): ' + formatStatusLabels(unmatchedASelectedRaw), { color: '374151', sz: 9 })]);
-        ws1Data.push([cCell('สถานะที่เลือก (ไม่ถูกเปรียบเทียบช่วงหลัง): ' + formatStatusLabels(unmatchedBSelectedRaw), { color: '374151', sz: 9 })]);
       }
       ws1Data.push([cCell('ส่งออกเฉพาะข้อมูลที่ผ่านตัวกรองบนหน้าจอ', { color: '6B7280', sz: 9 })]);
       ws1Data.push([cCell('สร้างเมื่อ: ' + new Date().toLocaleString('th-TH'), { color: '6B7280', sz: 9 })]);
@@ -6264,7 +6253,7 @@ function buildDailyCompare(data) {
       }
       ws1['!freeze'] = { xSplit: 0, ySplit: ws1ColHeaderRow + 1, topLeftCell: 'A' + (ws1ColHeaderRow + 2), activePane: 'bottomLeft', state: 'frozen' };
 
-      let ws4 = null, ws5 = null, ws6 = null;
+      let ws4 = null;
       if (!_isSingleMode && _stB) {
         const ws4Data = [];
         const h4 = [
@@ -6389,27 +6378,11 @@ function buildDailyCompare(data) {
         ws4['!autofilter'] = { ref: 'A6:' + XLSX.utils.encode_cell({ c: h4.length - 1, r: 5 }) };
         ws4['!freeze'] = { xSplit: 0, ySplit: 6, topLeftCell: 'A7', activePane: 'bottomLeft', state: 'frozen' };
 
-        ws5 = buildUnmatchedSheet(
-          unmatchedACards,
-          'รายเส้นทางที่ไม่ถูกเปรียบเทียบ: ' + periodALabel,
-          periodALabel,
-          periodBLabel,
-          unmatchedASelectedRaw
-        );
-        ws6 = buildUnmatchedSheet(
-          unmatchedBCards,
-          'รายเส้นทางที่ไม่ถูกเปรียบเทียบ: ' + periodBLabel,
-          periodBLabel,
-          periodALabel,
-          unmatchedBSelectedRaw
-        );
       }
 
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws1, 'สรุปผลดำเนินงาน');
       if (ws4) XLSX.utils.book_append_sheet(wb, ws4, 'รายเส้นทางที่ถูกเปรียบเทียบ');
-      if (ws5) XLSX.utils.book_append_sheet(wb, ws5, 'ไม่ถูกเปรียบเทียบช่วงแรก');
-      if (ws6) XLSX.utils.book_append_sheet(wb, ws6, 'ไม่ถูกเปรียบเทียบช่วงหลัง');
 
       // ─── Single-mode (มุมมองปกติ) extra sheets ──────────────────────────────
       // 1 sheet for ALL data + 4 sheets each filtered to a single status tag.
@@ -6859,8 +6832,6 @@ function buildDailyCompare(data) {
       const printSettingsBySheet = {
         'สรุปผลดำเนินงาน': { printTitlesRow: '1:3' },
         'รายเส้นทางที่ถูกเปรียบเทียบ': { printTitlesRow: '1:6' },
-        'ไม่ถูกเปรียบเทียบช่วงแรก': { printTitlesRow: '1:6' },
-        'ไม่ถูกเปรียบเทียบช่วงหลัง': { printTitlesRow: '1:6' },
         'รายเส้นทางที่เปรียบเทียบ': { printTitlesRow: '1:3' },
         'ขาดทุน': { printTitlesRow: '1:3' },
         'สำรองน้ำมัน > 50%': { printTitlesRow: '1:3' },
@@ -7323,11 +7294,9 @@ function buildDailyCompare(data) {
       if (_isSingleMode) {
         html = renderSingleTable(_stA, _stRef, _labelRef);
       } else {
+        if (_viewMode !== 'anomaly') _viewMode = 'anomaly';
         const qfBar = renderQFBarModern();
-        let tbl = '';
-        if (_viewMode === 'unmatched_a') tbl = renderUnmatchedTable(_stA, _stB, 'a');
-        else if (_viewMode === 'unmatched_b') tbl = renderUnmatchedTable(_stA, _stB, 'b');
-        else tbl = renderAnomalyTable(_stA, _stB);
+        const tbl = renderAnomalyTable(_stA, _stB);
         html = qfBar + tbl;
       }
       const shouldUpdate = _renderMemo.key !== stateKey || _renderMemo.html !== html;
@@ -7335,6 +7304,9 @@ function buildDailyCompare(data) {
         result.innerHTML = html;
         _renderMemo = { key: stateKey, html };
         if (!_isSingleMode) bindQFEvents();
+        const currentMode = _isSingleMode ? 'normal' : 'anomaly';
+        syncCompareStatusPanel(currentMode);
+        updateCompareStatusVisibility(currentMode);
       }
       if (shouldUpdate && animate) dcAnimateSections();
     }
@@ -7574,7 +7546,7 @@ function buildDailyCompare(data) {
       const cardsHtml = cardsData.map((card, idx) => {
         const displayStyle = card.statuses.some(s => selectedSet.has(s)) ? '' : 'display:none;';
         const anomCount = card.anomRows.filter(r => !r.statuses.includes('normal')).length;
-        return `<article class="dc-qa-case dc-status-card dc-status-card-anomaly" data-status-keys="${esc(card.statuses.join(','))}" data-anom-count="${anomCount}" style="${displayStyle}" onclick="dcOpenAnomalyModal(${idx})">
+        return `<article class="dc-qa-case dc-status-card dc-status-card-anomaly" data-card-idx="${idx}" data-status-keys="${esc(card.statuses.join(','))}" data-anom-count="${anomCount}" style="${displayStyle}" onclick="dcOpenAnomalyModal(${idx})">
           <header class="dc-qa-case-head">
             <div class="dc-qa-title-block">
               <div class="dc-qa-identity"><span class="dc-qa-customer">${esc(card.ga.customer || '-')}</span><span class="dc-qa-vtype">${esc(card.ga.vtype || '-')}</span></div>
@@ -7602,6 +7574,7 @@ function buildDailyCompare(data) {
     }
 
     function renderUnmatchedTable(stA, stB, side) {
+      return '';
       const isA = side === 'a';
       const myLabel = isA ? _labelA : _labelB;
       const cardsData = dcQaBuildUnmatchedCards(stA, stB, side);
@@ -7670,9 +7643,11 @@ function buildDailyCompare(data) {
       if (!card) return;
       const body = `<div class="dc-qa-table-wrap is-modal"><table class="dc-qa-table dc-qa-pair-table"><thead><tr><th>วันที่หลัก</th><th>วันที่เปรียบเทียบ</th><th>พขร.</th><th>ประเภทรถ</th><th>ทะเบียน</th><th>ราคาน้ำมัน</th><th>สำรองน้ำมัน</th><th>ราคารับ</th><th>ราคาจ่าย</th><th class="dc-qa-th-diff">ส่วนต่าง</th><th class="dc-qa-th-flag">ความผิดปกติ</th></tr></thead><tbody>${card.anomRows.map(row => dcQaPairRow(row, true)).join('')}</tbody></table></div>`;
       dcQaModalShell('dc_anom_modal', 'dc_anom_capture', `รายละเอียดการเปรียบเทียบ: ${esc(routeGroupHeaderDisplay(card.ga))}`, `${esc(card.ga.customer || '-')} · ${esc(card.ga.vtype || '-')} · ${esc(_labelA)} / ${esc(_labelB)}`, encodeURIComponent(`anomaly_${card.ga.route || 'route'}`), body);
+      updateCompareStatusVisibility('anomaly');
     };
 
     window.dcOpenUnmatchedModal = function (idx, side) {
+      return;
       const card = window._unmatchedCardsData?.[idx];
       if (!card) return;
       const isA = side === 'a';
