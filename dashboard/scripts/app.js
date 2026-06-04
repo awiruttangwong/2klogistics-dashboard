@@ -5777,9 +5777,10 @@ function buildDailyCompare(data) {
         const canDiff = hasNum(a) && hasNum(b);
         const diff = canDiff ? Number(a) - Number(b) : 0;
         const base = { ...(opts || {}), align: 'right', wrap: true };
-        // neutralColor: always use dark text (111827) regardless of Δ direction.
+        // neutralColor: changed values use dark text, unchanged values keep the muted no-change style.
         if (base.neutralColor) {
           delete base.neutralColor;
+          if (!canDiff || Math.abs(diff) < 0.0001) return mCell(bulletPairText(a, b), base);
           return cCell(bulletPairText(a, b), { ...base, color: '111827' });
         }
         if (!canDiff || Math.abs(diff) < 0.0001) return mCell(bulletPairText(a, b), base);
@@ -6275,6 +6276,7 @@ function buildDailyCompare(data) {
               return rows.length ? { ...card, rows, statuses: [statusFilter] } : null;
             }).filter(Boolean)
             : (sourceCards || []);
+          let maxStatusLen = isTargetSheet ? 14 : 16;
           const ws4Data = [];
           const titleText = statusFilter ? ('รายงานการเปรียบเทียบข้อมูล: ' + sheetTitle) : 'รายงานการเปรียบเทียบข้อมูลรายเส้นทาง';
           const titleRow4 = [tCell(titleText)];
@@ -6294,6 +6296,18 @@ function buildDailyCompare(data) {
 
           // Track group-header rows that need C+D and E+F merges.
           const ws4GroupHeaderRows = [];
+
+          cards.forEach(card => {
+            (card.rows || []).forEach(entry => {
+              const displayStatuses = statusFilter ? [statusFilter] : (entry.statuses || ['normal']);
+              const statusTxt = statusText(displayStatuses);
+              if (!statusTxt) return;
+              statusTxt.split('\n').forEach(line => {
+                if (line.length + 3 > maxStatusLen) maxStatusLen = line.length + 3;
+              });
+            });
+          });
+          maxStatusLen = Math.min(Math.max(maxStatusLen, isTargetSheet ? 14 : 16), 18);
 
           cards.forEach(card => {
             // Group header: A=customer, B=route, C+D='ประเภทรถ: <vtype>', E+F='ต้องตรวจสอบ N คู่'
@@ -6409,7 +6423,7 @@ function buildDailyCompare(data) {
           ws['!cols'] = [
             { wch: 12 }, { wch: 22 }, { wch: 12 }, { wch: 18 }, { wch: 18 },
             { wch: 13 }, { wch: 18 }, { wch: 16 }, { wch: 16 },
-            { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 24 }, { wch: 16 }
+            { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: maxStatusLen }, { wch: 16 }
           ];
           ws['!rows'] = ws4RowHeights;
           ws['!merges'] = [
