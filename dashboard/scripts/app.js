@@ -5448,7 +5448,7 @@ function buildDailyCompare(data) {
         return xlsxQuoteSheetName(sheetName) + '!' + xlsxAbsCell(range.s.r, range.s.c) + ':' + xlsxAbsCell(range.e.r, range.e.c);
       }
       function xlsxTitleRowsRef(sheetName, printTitlesRow) {
-        const match = String(printTitlesRow || '1:3').match(/^\s*(\d+)\s*:\s*(\d+)\s*$/);
+        const match = String(printTitlesRow || '1:3').match(/^\s*\$?(\d+)\s*:\s*\$?(\d+)\s*$/);
         if (!match) return null;
         return xlsxQuoteSheetName(sheetName) + '!$' + match[1] + ':$' + match[2];
       }
@@ -6282,14 +6282,10 @@ function buildDailyCompare(data) {
           const titleRow4 = [tCell(titleText)];
           for (let i = 1; i < h4.length; i++) titleRow4.push(tCell(''));
           ws4Data.push(titleRow4);
-          ws4Data.push([cCell(filterSummaryText() + ' | หน้าที่ส่งออก: ' + sheetTitle, { color: '6B7280', sz: 9 })]);
           const statusInfo = statusFilter
             ? 'สถานะที่กรอง: ' + (exportLabelMap[statusFilter] || statusFilter)
             : 'สถานะที่เลือก: ' + formatStatusLabels(selectedRaw);
           const exportScope = statusFilter ? 'ส่งออกเฉพาะสถานะนี้' : 'ส่งออกเฉพาะข้อมูลที่ผ่านตัวกรองบนหน้าจอ';
-          ws4Data.push([cCell(statusInfo + ' | ' + exportScope, { color: '374151', sz: 9 })]);
-          ws4Data.push([cCell('ช่วงข้อมูลหลัก: ' + periodALabel + ' | ช่วงข้อมูลเปรียบเทียบ: ' + periodBLabel + ' | Δ = ' + periodALabel + ' - ' + periodBLabel, { color: '374151', sz: 9 })]);
-          ws4Data.push([]);
           const headerRow4 = ws4Data.length;
           ws4Data.push(h4.map(t => hCell(t)));
           let rowIdx4 = headerRow4 + 1;
@@ -6428,9 +6424,6 @@ function buildDailyCompare(data) {
           ws['!rows'] = ws4RowHeights;
           ws['!merges'] = [
             { s: { r: 0, c: 0 }, e: { r: 0, c: h4.length - 1 } },
-            { s: { r: 1, c: 0 }, e: { r: 1, c: h4.length - 1 } },
-            { s: { r: 2, c: 0 }, e: { r: 2, c: h4.length - 1 } },
-            { s: { r: 3, c: 0 }, e: { r: 3, c: h4.length - 1 } },
             // Per-card group header: merge C+D (col 2-3) and E+F (col 4-5)
             ...ws4GroupHeaderRows.flatMap(r => [
               { s: { r, c: 2 }, e: { r, c: 3 } },
@@ -6447,8 +6440,9 @@ function buildDailyCompare(data) {
               return [{ s: { r: rowIndex, c: 0 }, e: { r: rowIndex, c: h4.length - 1 } }];
             })
           ];
-          ws['!autofilter'] = { ref: 'A6:' + XLSX.utils.encode_cell({ c: h4.length - 1, r: 5 }) };
-          ws['!freeze'] = { xSplit: 0, ySplit: 6, topLeftCell: 'A7', activePane: 'bottomLeft', state: 'frozen' };
+          const headerRowNumber4 = headerRow4 + 1;
+          ws['!autofilter'] = { ref: 'A' + headerRowNumber4 + ':' + XLSX.utils.encode_cell({ c: h4.length - 1, r: headerRow4 }) };
+          ws['!freeze'] = { xSplit: 0, ySplit: headerRowNumber4, topLeftCell: 'A' + (headerRowNumber4 + 1), activePane: 'bottomLeft', state: 'frozen' };
           return ws;
         };
 
@@ -6916,7 +6910,7 @@ function buildDailyCompare(data) {
 
       const printSettingsBySheet = {
         'สรุปผลดำเนินงาน': { printTitlesRow: '1:3' },
-        'รายเส้นทางที่ถูกเปรียบเทียบ': { printTitlesRow: '1:6' },
+        'รายเส้นทางที่ถูกเปรียบเทียบ': { printTitlesRow: '$1:$2' },
         'รายเส้นทางที่เปรียบเทียบ': { printTitlesRow: '1:3' },
         'ขาดทุน': { printTitlesRow: '1:3' },
         'สำรองน้ำมัน > 50%': { printTitlesRow: '1:3' },
@@ -6925,8 +6919,9 @@ function buildDailyCompare(data) {
       };
       if (!_isSingleMode) {
         compareStatusSheetConfigs.forEach(s => {
-          printSettingsBySheet[s.name] = { printTitlesRow: '1:6' };
+          printSettingsBySheet[s.name] = { printTitlesRow: '$1:$2' };
         });
+        printSettingsBySheet['รายเส้นทางที่ถูกเปรียบเทียบ'] = { printTitlesRow: '$1:$2' };
       }
 
       const safeFilePart = s => String(s || '').replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '_');
