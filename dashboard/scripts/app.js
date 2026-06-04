@@ -6254,135 +6254,206 @@ function buildDailyCompare(data) {
       ws1['!freeze'] = { xSplit: 0, ySplit: ws1ColHeaderRow + 1, topLeftCell: 'A' + (ws1ColHeaderRow + 2), activePane: 'bottomLeft', state: 'frozen' };
 
       let ws4 = null;
+      const compareStatusSheets = [];
+      const compareStatusSheetConfigs = [
+        { key: 'loss', name: 'ขาดทุน' },
+        { key: 'oil50', name: 'สำรองน้ำมัน > 50%' },
+        { key: 'payHigh', name: 'ราคาจ่ายผิดปกติ' },
+        { key: 'recvLow', name: 'ราคารับผิดปกติ' }
+      ];
       if (!_isSingleMode && _stB) {
-        const ws4Data = [];
-        const h4 = [
-          'ลูกค้า', 'ชื่อเส้นทาง', 'วันที่หลัก', 'วันที่เปรียบเทียบ', 'พขร.',
-          'ประเภทรถ', 'ทะเบียน', 'ราคาน้ำมัน', 'สำรองน้ำมัน',
-          'ราคารับ', 'ราคาจ่าย', 'ส่วนต่าง', 'ความผิดปกติ', 'หมายเหตุ'
-        ];
-        const titleRow4 = [tCell('รายงานการเปรียบเทียบข้อมูลรายเส้นทาง')];
-        for (let i = 1; i < h4.length; i++) titleRow4.push(tCell(''));
-        ws4Data.push(titleRow4);
-        ws4Data.push([cCell(filterSummaryText() + ' | หน้าที่ส่งออก: รายเส้นทางที่ถูกเปรียบเทียบ', { color: '6B7280', sz: 9 })]);
-        ws4Data.push([cCell('สถานะที่เลือก: ' + formatStatusLabels(anomalySelectedRaw) + ' | ส่งออกเฉพาะข้อมูลที่ผ่านตัวกรองบนหน้าจอ', { color: '374151', sz: 9 })]);
-        ws4Data.push([cCell('ช่วงข้อมูลหลัก: ' + periodALabel + ' | ช่วงข้อมูลเปรียบเทียบ: ' + periodBLabel + ' | Δ = ' + periodALabel + ' - ' + periodBLabel, { color: '374151', sz: 9 })]);
-        ws4Data.push([]);
-        const headerRow4 = ws4Data.length;
-        ws4Data.push(h4.map(t => hCell(t)));
-        let rowIdx4 = headerRow4 + 1;
-
-        // Track group-header rows that need C+D and E+F merges.
-        const ws4GroupHeaderRows = [];
-
-        anomalyCards.forEach(card => {
-          // Group header: A=customer, B=route, C+D='ประเภทรถ: <vtype>', E+F='ต้องตรวจสอบ N คู่'
-          const cardAnomCount = (card.rows || []).filter(r => !(r.statuses || []).includes('normal')).length;
-          const summaryText = cardAnomCount > 0
-            ? 'ต้องตรวจสอบ ' + cardAnomCount + ' คู่เปรียบเทียบ'
-            : 'รวม ' + (card.rows || []).length + ' คู่เปรียบเทียบ';
-          const top = [
-            cCell(card.ga.customer || '-', { bold: true, fill: 'DBEAFE' }),
-            cCell(routeGroupHeaderDisplay(card.ga), { bold: true, fill: 'DBEAFE' }),
-            cCell('ประเภทรถ: ' + (card.ga.vtype || '-'), { bold: true, fill: 'DBEAFE' }),
-            cCell('', { fill: 'DBEAFE' }),                                    // D — merged with C
-            cCell(summaryText, { bold: true, fill: 'DBEAFE' }),
-            cCell('', { fill: 'DBEAFE' })                                     // F — merged with E
+        const buildCompareSheet = (sourceCards, sheetTitle, selectedRaw, statusFilter = null) => {
+          const h4 = [
+            'ลูกค้า', 'ชื่อเส้นทาง', 'วันที่หลัก', 'วันที่เปรียบเทียบ', 'พขร.',
+            'ประเภทรถ', 'ทะเบียน', 'ราคาน้ำมัน', 'สำรองน้ำมัน',
+            'ราคารับ', 'ราคาจ่าย', 'ส่วนต่าง', 'ความผิดปกติ', 'หมายเหตุ'
           ];
-          while (top.length < h4.length) top.push(cCell('', { fill: 'DBEAFE' }));
-          ws4GroupHeaderRows.push(ws4Data.length); // record row index for merge
-          ws4Data.push(top);
-          rowIdx4++;
+          const isTargetSheet = compareStatusSheetConfigs.some(config => config.name === sheetTitle);
+          const cards = statusFilter
+            ? (sourceCards || []).map(card => {
+              const rows = (card.rows || []).filter(entry => (entry.statuses || []).includes(statusFilter));
+              return rows.length ? { ...card, rows, statuses: [statusFilter] } : null;
+            }).filter(Boolean)
+            : (sourceCards || []);
+          const ws4Data = [];
+          const titleText = statusFilter ? ('รายงานการเปรียบเทียบข้อมูล: ' + sheetTitle) : 'รายงานการเปรียบเทียบข้อมูลรายเส้นทาง';
+          const titleRow4 = [tCell(titleText)];
+          for (let i = 1; i < h4.length; i++) titleRow4.push(tCell(''));
+          ws4Data.push(titleRow4);
+          ws4Data.push([cCell(filterSummaryText() + ' | หน้าที่ส่งออก: ' + sheetTitle, { color: '6B7280', sz: 9 })]);
+          const statusInfo = statusFilter
+            ? 'สถานะที่กรอง: ' + (exportLabelMap[statusFilter] || statusFilter)
+            : 'สถานะที่เลือก: ' + formatStatusLabels(selectedRaw);
+          const exportScope = statusFilter ? 'ส่งออกเฉพาะสถานะนี้' : 'ส่งออกเฉพาะข้อมูลที่ผ่านตัวกรองบนหน้าจอ';
+          ws4Data.push([cCell(statusInfo + ' | ' + exportScope, { color: '374151', sz: 9 })]);
+          ws4Data.push([cCell('ช่วงข้อมูลหลัก: ' + periodALabel + ' | ช่วงข้อมูลเปรียบเทียบ: ' + periodBLabel + ' | Δ = ' + periodALabel + ' - ' + periodBLabel, { color: '374151', sz: 9 })]);
+          ws4Data.push([]);
+          const headerRow4 = ws4Data.length;
+          ws4Data.push(h4.map(t => hCell(t)));
+          let rowIdx4 = headerRow4 + 1;
 
-          (card.rows || []).forEach(entry => {
-            const ra = entry.ra || {};
-            const rb = entry.rb || {};
-            const mA = (ra.margin == null || isNaN(ra.margin)) ? ((ra.recv || 0) - (ra.pay || 0) - (ra.oil || 0)) : ra.margin;
-            const mB = (rb.margin == null || isNaN(rb.margin)) ? ((rb.recv || 0) - (rb.pay || 0) - (rb.oil || 0)) : rb.margin;
-            const oilPriceA = getOilPriceByDate(ra.date);
-            const oilPriceB = getOilPriceByDate(rb.date);
-            const zf = (rowIdx4 % 2 === 0) ? 'F9FAFB' : null;
-            // Bullet cells: vertical align top so • A / • B / Δ lines up at top of tall row.
-            const bOpts = f => ({ fill: f, align: 'right', wrap: true, valign: 'top' });
-            // Neutral bullet: col J (ราคารับ) and K (ราคาจ่าย) use dark text regardless of Δ.
-            const bOptsNeutral = f => ({ fill: f, align: 'right', wrap: true, valign: 'top', neutralColor: true });
-            const row = [
-              cCell(ra.customer || rb.customer || '-', { fill: zf }),
-              cCell(routeDisplay(ra.route || ra.routeDesc ? ra : rb), { fill: zf }),
-              cCell(ra.date || '-', { fill: zf }),
-              cCell(rb.date || '-', { fill: zf }),
-              cCell(ra.driver || rb.driver || '-', { fill: zf }),
-              cCell((ra.vtype || '-') + ' / ' + (rb.vtype || '-'), { fill: zf }),
-              cCell((ra.plate || '-') + ' / ' + (rb.plate || '-'), { fill: zf }),
-              bulletPairCell(oilPriceA, oilPriceB, bOpts(zf), true),
-              bulletPairCell(ra.oil, rb.oil, bOpts(zf), true),
-              bulletPairCell(ra.recv, rb.recv, bOptsNeutral(zf), false),   // col J — dark
-              bulletPairCell(ra.pay, rb.pay, bOptsNeutral(zf), true),      // col K — dark
-              bulletPairCell(mA, mB, bOpts(zf), false),                    // col L — colored
-              statusRichCell(entry.statuses || ['normal'], { fill: zf, align: 'left', wrap: true, valign: 'top' }),
-              cCell('', { fill: zf })
+          // Track group-header rows that need C+D and E+F merges.
+          const ws4GroupHeaderRows = [];
+
+          cards.forEach(card => {
+            // Group header: A=customer, B=route, C+D='ประเภทรถ: <vtype>', E+F='ต้องตรวจสอบ N คู่'
+            const cardAnomCount = (card.rows || []).filter(r => !(r.statuses || []).includes('normal')).length;
+            const summaryText = cardAnomCount > 0
+              ? 'ต้องตรวจสอบ ' + cardAnomCount + ' คู่เปรียบเทียบ'
+              : 'รวม ' + (card.rows || []).length + ' คู่เปรียบเทียบ';
+            const top = [
+              cCell(card.ga.customer || '-', { bold: true, fill: 'DBEAFE' }),
+              cCell(routeGroupHeaderDisplay(card.ga), { bold: true, fill: 'DBEAFE' }),
+              cCell('ประเภทรถ: ' + (card.ga.vtype || '-'), { bold: true, fill: 'DBEAFE' }),
+              cCell('', { fill: 'DBEAFE' }),                                    // D - merged with C
+              cCell(summaryText, { bold: true, fill: 'DBEAFE' }),
+              cCell('', { fill: 'DBEAFE' })                                     // F - merged with E
             ];
-            ws4Data.push(row);
+            while (top.length < h4.length) top.push(cCell('', { fill: 'DBEAFE' }));
+            applyRouteGroupOuterBorder(top);
+            ws4GroupHeaderRows.push(ws4Data.length); // record row index for merge
+            ws4Data.push(top);
             rowIdx4++;
+
+            (card.rows || []).forEach(entry => {
+              const ra = entry.ra || {};
+              const rb = entry.rb || {};
+              const mA = (ra.margin == null || isNaN(ra.margin)) ? ((ra.recv || 0) - (ra.pay || 0) - (ra.oil || 0)) : ra.margin;
+              const mB = (rb.margin == null || isNaN(rb.margin)) ? ((rb.recv || 0) - (rb.pay || 0) - (rb.oil || 0)) : rb.margin;
+              const oilPriceA = getOilPriceByDate(ra.date);
+              const oilPriceB = getOilPriceByDate(rb.date);
+              const zf = (rowIdx4 % 2 === 0) ? 'F9FAFB' : null;
+              // Bullet cells: vertical align top so each line stays aligned in tall rows.
+              const bOpts = f => ({ fill: f, align: 'right', wrap: true, valign: 'top' });
+              // Neutral bullet: col J/K/L use dark text regardless of Δ direction.
+              const bOptsNeutral = f => ({ fill: f, align: 'right', wrap: true, valign: 'top', neutralColor: true });
+              const displayStatuses = statusFilter ? [statusFilter] : (entry.statuses || ['normal']);
+              const colMValign = isTargetSheet ? 'center' : 'top';
+              const row = [
+                cCell(ra.customer || rb.customer || '-', { fill: zf }),
+                cCell(routeDisplay(ra.route || ra.routeDesc ? ra : rb), { fill: zf }),
+                cCell(ra.date || '-', { fill: zf }),
+                cCell(rb.date || '-', { fill: zf }),
+                cCell(ra.driver || rb.driver || '-', { fill: zf }),
+                cCell((ra.vtype || '-') + ' / ' + (rb.vtype || '-'), { fill: zf }),
+                cCell((ra.plate || '-') + ' / ' + (rb.plate || '-'), { fill: zf }),
+                bulletPairCell(oilPriceA, oilPriceB, bOpts(zf), true),
+                bulletPairCell(ra.oil, rb.oil, bOpts(zf), true),
+                bulletPairCell(ra.recv, rb.recv, bOptsNeutral(zf), false),   // col J - dark
+                bulletPairCell(ra.pay, rb.pay, bOptsNeutral(zf), true),      // col K - dark
+                bulletPairCell(mA, mB, bOptsNeutral(zf), false),             // col L - dark
+                statusRichCell(displayStatuses, { fill: zf, align: 'left', wrap: true, valign: colMValign }),
+                cCell('', { fill: zf })
+              ];
+              ws4Data.push(row);
+              rowIdx4++;
+            });
+          });
+
+          if (cards.length === 0) {
+            const noDataText = statusFilter
+              ? 'ไม่พบคู่เปรียบเทียบในสถานะ "' + (exportLabelMap[statusFilter] || statusFilter) + '"'
+              : 'ไม่พบคู่เปรียบเทียบในช่วงเวลาที่เลือก';
+            const noData4 = [mCell(noDataText, { align: 'center', bold: true })];
+            for (let i = 1; i < h4.length; i++) noData4.push(cCell(''));
+            ws4Data.push(noData4);
+          }
+
+          const bottomStartIdx = ws4Data.length;
+          ws4Data.push([]);
+          const reviewerStartCol = h4.length - 3; // L
+          const appendNoteRow = (noteCell, reviewerCell = null) => {
+            const row = [noteCell];
+            if (isTargetSheet) {
+              while (row.length < reviewerStartCol) row.push(cCell(''));
+              row.push(reviewerCell || cCell(''));
+              while (row.length < h4.length) row.push(cCell(''));
+            }
+            ws4Data.push(row);
+          };
+          const reviewerTitleCell = cCell('ผู้ตรวจสอบ', { bold: true, sz: 10, color: '111827', align: 'center', fill: 'EEF2FF' });
+          const reviewerSignCell = cCell('(                                      )', { sz: 11, color: '111827', align: 'center', fill: 'FFFFFF' });
+          const reviewerNameCell = cCell('ลงชื่อ', { sz: 9, color: '6B7280', align: 'center', fill: 'FFFFFF' });
+          const reviewerDateCell = cCell('วันที่ ____ / ____ / ______', { sz: 9, color: '6B7280', align: 'center', fill: 'FFFFFF' });
+
+          appendNoteRow(cCell('หมายเหตุ', { bold: true, sz: 10, color: '111827' }), reviewerTitleCell);
+          appendNoteRow(cCell(filterSummaryText() + ' | หน้าที่ส่งออก: ' + sheetTitle, { color: '6B7280', sz: 9 }), reviewerSignCell);
+          appendNoteRow(cCell(statusInfo + ' | ' + exportScope, { color: '374151', sz: 9 }), reviewerNameCell);
+          appendNoteRow(cCell('ช่วงข้อมูลหลัก: ' + periodALabel + ' | ช่วงข้อมูลเปรียบเทียบ: ' + periodBLabel + ' | Δ = ' + periodALabel + ' - ' + periodBLabel, { color: '374151', sz: 9 }), reviewerDateCell);
+
+          // Row height map: group headers = 20pt, data rows = proportional to content.
+          // Excel row height in points: each line of sz:10 font needs ~14pt.
+          const ws4GroupHeaderSet = new Set(ws4GroupHeaderRows);
+          const ws4RowHeights = ws4Data.map((rowData, idx) => {
+            if (idx === 0) return { hpt: 32 };
+            if (idx <= headerRow4) return {};
+            if (idx >= bottomStartIdx) return {};
+            if (ws4GroupHeaderSet.has(idx)) return { hpt: 20 };
+            // Count lines in all bullet columns H(7) I(8) J(9) K(10) L(11) and status M(12).
+            const countLines = colIdx => {
+              const cell = rowData[colIdx];
+              return (cell && cell.v) ? String(cell.v).split('\n').length : 1;
+            };
+            const lines = Math.max(
+              countLines(7),   // H ราคาน้ำมัน
+              countLines(8),   // I สำรองน้ำมัน
+              countLines(9),   // J ราคารับ
+              countLines(10),  // K ราคาจ่าย
+              countLines(11),  // L ส่วนต่าง
+              countLines(12),  // M ความผิดปกติ
+              1
+            );
+            return { hpt: Math.max(lines * 14 + 6, 20) };
+          });
+          const ws = XLSX.utils.aoa_to_sheet(ws4Data);
+          ws['!cols'] = [
+            { wch: 12 }, { wch: 22 }, { wch: 12 }, { wch: 18 }, { wch: 18 },
+            { wch: 13 }, { wch: 18 }, { wch: 16 }, { wch: 16 },
+            { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 24 }, { wch: 16 }
+          ];
+          ws['!rows'] = ws4RowHeights;
+          ws['!merges'] = [
+            { s: { r: 0, c: 0 }, e: { r: 0, c: h4.length - 1 } },
+            { s: { r: 1, c: 0 }, e: { r: 1, c: h4.length - 1 } },
+            { s: { r: 2, c: 0 }, e: { r: 2, c: h4.length - 1 } },
+            { s: { r: 3, c: 0 }, e: { r: 3, c: h4.length - 1 } },
+            // Per-card group header: merge C+D (col 2-3) and E+F (col 4-5)
+            ...ws4GroupHeaderRows.flatMap(r => [
+              { s: { r, c: 2 }, e: { r, c: 3 } },
+              { s: { r, c: 4 }, e: { r, c: 5 } }
+            ]),
+            ...ws4Data.slice(bottomStartIdx + 1).flatMap((_, idx) => {
+              const rowIndex = bottomStartIdx + 1 + idx;
+              if (isTargetSheet) {
+                return [
+                  { s: { r: rowIndex, c: 0 }, e: { r: rowIndex, c: reviewerStartCol - 1 } },
+                  { s: { r: rowIndex, c: reviewerStartCol }, e: { r: rowIndex, c: h4.length - 1 } }
+                ];
+              }
+              return [{ s: { r: rowIndex, c: 0 }, e: { r: rowIndex, c: h4.length - 1 } }];
+            })
+          ];
+          ws['!autofilter'] = { ref: 'A6:' + XLSX.utils.encode_cell({ c: h4.length - 1, r: 5 }) };
+          ws['!freeze'] = { xSplit: 0, ySplit: 6, topLeftCell: 'A7', activePane: 'bottomLeft', state: 'frozen' };
+          return ws;
+        };
+
+        ws4 = buildCompareSheet(anomalyCards, 'รายเส้นทางที่ถูกเปรียบเทียบ', anomalySelectedRaw, null);
+        compareStatusSheetConfigs.forEach(s => {
+          compareStatusSheets.push({
+            name: s.name,
+            ws: buildCompareSheet(anomalyCardsAll, s.name, [s.key], s.key)
           });
         });
-
-        if (anomalyCards.length === 0) {
-          const noData4 = [mCell('ไม่พบคู่เปรียบเทียบในช่วงเวลาที่เลือก', { align: 'center', bold: true })];
-          for (let i = 1; i < h4.length; i++) noData4.push(cCell(''));
-          ws4Data.push(noData4);
-        }
-
-        // Row height map: group headers = 20pt, data rows = proportional to content.
-        // Excel row height in points: each line of sz:10 font needs ~14pt.
-        // Add 6pt padding. Formula: lines × 14 + 6, min 20pt.
-        const ws4GroupHeaderSet = new Set(ws4GroupHeaderRows);
-        const ws4RowHeights = ws4Data.map((rowData, idx) => {
-          if (idx === 0) return { hpt: 32 };
-          if (idx <= headerRow4) return {};
-          if (ws4GroupHeaderSet.has(idx)) return { hpt: 20 };
-          // Count lines in all bullet columns H(7) I(8) J(9) K(10) L(11) and status M(12).
-          const countLines = colIdx => {
-            const cell = rowData[colIdx];
-            return (cell && cell.v) ? String(cell.v).split('\n').length : 1;
-          };
-          const lines = Math.max(
-            countLines(7),   // H ราคาน้ำมัน
-            countLines(8),   // I สำรองน้ำมัน
-            countLines(9),   // J ราคารับ
-            countLines(10),  // K ราคาจ่าย
-            countLines(11),  // L ส่วนต่าง
-            countLines(12),  // M ความผิดปกติ
-            1
-          );
-          return { hpt: Math.max(lines * 14 + 6, 20) };
-        });
-        ws4 = XLSX.utils.aoa_to_sheet(ws4Data);
-        ws4['!cols'] = [
-          { wch: 12 }, { wch: 22 }, { wch: 12 }, { wch: 18 }, { wch: 18 },
-          { wch: 13 }, { wch: 18 }, { wch: 16 }, { wch: 16 },
-          { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 24 }, { wch: 16 }
-        ];
-        ws4['!rows'] = ws4RowHeights;
-        ws4['!merges'] = [
-          { s: { r: 0, c: 0 }, e: { r: 0, c: h4.length - 1 } },
-          { s: { r: 1, c: 0 }, e: { r: 1, c: h4.length - 1 } },
-          { s: { r: 2, c: 0 }, e: { r: 2, c: h4.length - 1 } },
-          { s: { r: 3, c: 0 }, e: { r: 3, c: h4.length - 1 } },
-          // Per-card group header: merge C+D (col 2-3) and E+F (col 4-5)
-          ...ws4GroupHeaderRows.flatMap(r => [
-            { s: { r, c: 2 }, e: { r, c: 3 } },
-            { s: { r, c: 4 }, e: { r, c: 5 } }
-          ])
-        ];
-        ws4['!autofilter'] = { ref: 'A6:' + XLSX.utils.encode_cell({ c: h4.length - 1, r: 5 }) };
-        ws4['!freeze'] = { xSplit: 0, ySplit: 6, topLeftCell: 'A7', activePane: 'bottomLeft', state: 'frozen' };
 
       }
 
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws1, 'สรุปผลดำเนินงาน');
       if (ws4) XLSX.utils.book_append_sheet(wb, ws4, 'รายเส้นทางที่ถูกเปรียบเทียบ');
+      compareStatusSheets.forEach(sheet => {
+        if (sheet?.ws) XLSX.utils.book_append_sheet(wb, sheet.ws, sheet.name);
+      });
 
       // ─── Single-mode (มุมมองปกติ) extra sheets ──────────────────────────────
       // 1 sheet for ALL data + 4 sheets each filtered to a single status tag.
@@ -6838,6 +6909,11 @@ function buildDailyCompare(data) {
         'ราคาจ่ายผิดปกติ': { printTitlesRow: '1:3' },
         'ราคารับผิดปกติ': { printTitlesRow: '1:3' }
       };
+      if (!_isSingleMode) {
+        compareStatusSheetConfigs.forEach(s => {
+          printSettingsBySheet[s.name] = { printTitlesRow: '1:6' };
+        });
+      }
 
       const safeFilePart = s => String(s || '').replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '_');
       const fileName = 'วิเคราะห์ผลการดำเนินงาน_' + safeFilePart(periodALabel) + (_isSingleMode ? '' : '_vs_' + safeFilePart(periodBLabel)) + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
@@ -6973,29 +7049,19 @@ function buildDailyCompare(data) {
     }
 
     // Status logic for matched-pair mode (Anomaly view):
-    // อิงคู่ A/B ของแถวเดียวกันตรงๆ
-    // - loss: margin ของ A หรือ B ติดลบ
-    // - oil50: A หรือ B มี oil > pay * 0.5
-    // - payHigh: A.pay และ B.pay ต่างกัน
-    // - recvLow: ราคาน้ำมันของ A/B เท่ากัน และ recv ของ A/B ต่างกัน
-    // - normal: ไม่เข้าเงื่อนไขใดเลย
+    // ใช้ฐานคิดเดียวกับ normal view โดยประเมินทั้งฝั่ง A และ B ด้วยกฎเดียวกัน
+    // แล้วรวม tag ที่ได้จากทั้งสองฝั่งเข้าด้วยกัน
     function dcQaCompareStatuses(ra, rb) {
-      const statuses = new Set();
-      if ((ra.margin || 0) < 0 || (rb.margin || 0) < 0) statuses.add('loss');
-      if (((ra.oil || 0) > (ra.pay || 0) * 0.5 && (ra.pay || 0) > 0) ||
-        ((rb.oil || 0) > (rb.pay || 0) * 0.5 && (rb.pay || 0) > 0)) statuses.add('oil50');
-
-      const payA = ra.pay || 0;
-      const payB = rb.pay || 0;
-      if (hasNum(payA) && hasNum(payB) && (payA > payB || payA < payB)) statuses.add('payHigh');
-
-      const oilPriceA = getOilPriceByDate(ra?.date);
-      const oilPriceB = getOilPriceByDate(rb?.date);
-      if (hasNum(oilPriceA) && hasNum(oilPriceB) && Math.abs((oilPriceA || 0) - (oilPriceB || 0)) < 0.0001 &&
-        hasNum(ra.recv) && hasNum(rb.recv) && Math.abs((ra.recv || 0) - (rb.recv || 0)) >= 0.0001) statuses.add('recvLow');
-
-      if (!statuses.size) statuses.add('normal');
-      return [...statuses];
+      const pairStatuses = [
+        ...dcQaTripStatuses(ra || {}, [ra || {}, rb || {}]),
+        ...dcQaTripStatuses(rb || {}, [rb || {}, ra || {}])
+      ];
+      const unique = [...new Set(pairStatuses)];
+      const cleaned = unique.some(status => status !== 'normal')
+        ? unique.filter(status => status !== 'normal')
+        : ['normal'];
+      cleaned.sort((a, b) => dcQaStatusOrder.indexOf(a) - dcQaStatusOrder.indexOf(b));
+      return cleaned;
     }
 
     function dcQaPairNotes(ra, rb, statuses) {
