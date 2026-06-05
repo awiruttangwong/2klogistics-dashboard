@@ -932,7 +932,7 @@ body.sidebar-hover-transitioning .content.page-daily .dc-normal-summary {
     bottom: 0;
     width: 94px;
     transform: translate3d(0, 0, 0);
-    transition: width 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+    transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1);
     box-shadow: none;
     contain: layout style paint;
   }
@@ -942,8 +942,8 @@ body.sidebar-hover-transitioning .content.page-daily .dc-normal-summary {
     width: calc(100% - 94px);
     min-width: 0;
     overflow: hidden;
-    transition: margin-left 0.34s cubic-bezier(0.22, 1, 0.36, 1),
-      width 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+    transition: margin-left 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+      width 0.28s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   body.sidebar-auto.sidebar-hover-expanded .sidebar {
@@ -1035,7 +1035,7 @@ body.sidebar-hover-transitioning .content.page-daily .dc-normal-summary {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
-    transition: opacity 0.08s ease;
+    transition: none;
   }
 
   body.sidebar-auto.sidebar-hover-transitioning .sidebar-header h1,

@@ -37,12 +37,14 @@ Baseline ที่ตรวจแล้ว:
 - [x] Phase 2 filter panel DOM diff สำเร็จ: `buildMsOptions()` ข้ามการ rebuild เฉพาะเมื่อ option set/selected set เหมือนเดิมและไม่มี search ค้าง โดยยัง rebuild เมื่อ search ต้องถูก clear หรือ filter state เปลี่ยน
 - [x] Phase 2 local metrics guard สำเร็จ: ลด CLS/INP local จาก F12 report โดย preload desktop auto-sidebar ก่อน first paint, ปรับ skeleton ให้ขนาดใกล้ nav/topbar จริง และ defer heavy `showPage()` หลัง nav click เพื่อให้ active state paint ก่อน
 - [x] Phase 2 skeleton polish สำเร็จ: ปรับ loading skeleton สำหรับ desktop collapsed sidebar ให้แสดง skeleton block แทนโลโก้จริง, ซ่อน brand/meta skeleton ที่ถูกบีบ, จัด nav skeleton เป็น icon blocks และเปลี่ยน topbar skeleton เป็น icon + text line ที่สมดุลขึ้น
+- [x] Phase 2 sidebar hover polish สำเร็จ: หน้า Daily Compare คลิก nav แล้วยุบ auto-sidebar เพื่อไม่ให้ดูค้างเปิด, ขยับเมาส์ใน sidebar แล้วเปิดกลับได้, mouse leave แล้วยุบกลับ 94px และข้อความ nav หลัง hover ไม่ fade ช้าจนเหมือนค้าง
+- [x] Phase 2 sidebar timing follow-up สำเร็จ: ลด auto-sidebar transition เป็น 280ms และลด mouse-leave delay เพื่อให้หน้า Daily Compare ยุบกลับไวขึ้น โดยทดสอบ live API/hover/leave แล้วไม่พบ fallback หรือ console/page error
 
 ### ยังไม่ทำในรอบนี้
 
 - [ ] Summary-first แล้ว background-load trips: ยังไม่ทำ เพราะอาจกระทบ stable behavior ที่หน้า compare ต้องมี trips พร้อมก่อน render
 - [ ] Browser/API payload cache ด้วย version key: ยังไม่ทำ เพราะต้องยืนยัน cache invalidation กับ batch/API version ก่อน เพื่อกันข้อมูลเก่าค้าง
-- [ ] CSS/animation polish: ยังไม่ทำ เพราะเป็นงาน visual/perf ที่ควรทำหลังมี baseline telemetry แล้ว
+- [ ] CSS/animation polish ส่วนอื่นๆ: ยังไม่ทำ เพราะเป็นงาน visual/perf กว้างกว่าส่วน sidebar hover ที่แก้เฉพาะจุดแล้ว และควรทำหลังมี baseline telemetry เพิ่มเติม
 - [x] Phase 2 filter panel DOM diff: ทำแล้วและทดสอบ interaction ของ route filter panel ผ่าน
 
 Guardrail ของรอบล่าสุด: ไม่เปลี่ยนสูตรคำนวณ margin, pct, oil ratio, route identity, schema ข้อมูล, fallback data, startup live API loader, XLSX sheet logic, หรือ labels ของมุมมองปกติ
