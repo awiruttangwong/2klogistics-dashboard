@@ -82,6 +82,20 @@ function isFlashCustomerName(value) {
   return text === 'FASH' || text.startsWith('FLASH');
 }
 
+function isSpxCustomerName(value) {
+  const text = String(value || '').trim().toUpperCase();
+  return text === 'SPX' || text.startsWith('SPX-');
+}
+
+function isTimedRouteCustomerName(value) {
+  return isFlashCustomerName(value) || isSpxCustomerName(value);
+}
+
+function isRouteCodeLike(value) {
+  const text = normalizeText(value, '');
+  return !!text && text !== '-' && !/[\u0E00-\u0E7F]/.test(text) && /[-_]/.test(text) && /[A-Za-z0-9]/.test(text);
+}
+
 function parseTimedRouteParts(route) {
   const rawRoute = normalizeText(route, '');
   if (!rawRoute) return null;
@@ -113,19 +127,22 @@ function getRouteIdentity(row) {
     .map(candidate => ({ ...candidate, parsed: parseTimedRouteParts(candidate.value) }))
     .find(candidate => candidate.parsed);
   const parsed = parsedCandidate?.parsed || null;
-  const useFlashCore = parsed && (isFlashCustomerName(customer) || customer === '-');
-  const routeCore = useFlashCore ? parsed.core : route;
+  const useFlashCore = parsed && (isTimedRouteCustomerName(customer) || customer === '-');
+  const spxRouteCode = isSpxCustomerName(customer)
+    ? ([route, routeDesc, routeName].find(isRouteCodeLike) || route)
+    : route;
+  const routeCore = useFlashCore ? parsed.core : spxRouteCode;
   const routeVehicle = useFlashCore ? parsed.vehicle : vtype;
   const routePrefix = useFlashCore ? `${parsed.service}-${parsed.vehicle}` : '';
-  const displayRoute = useFlashCore ? (parsed.routeWithoutTime || parsed.routeBeforeTime) : route;
+  const displayRoute = useFlashCore ? (parsed.routeWithoutTime || parsed.routeBeforeTime) : spxRouteCode;
   const keySuffix = useFlashCore && parsed.suffixAfterTime ? `|${parsed.suffixAfterTime}` : '';
   const routeDescription = useFlashCore
     ? (parsedCandidate.source === 'route'
       ? (cleanRouteDisplayText(routeDesc) || cleanRouteDisplayText(routeName) || displayRoute)
       : (cleanRouteDisplayText(route) || cleanRouteDisplayText(routeName) || displayRoute))
-    : route;
+    : spxRouteCode;
   return {
-    key: useFlashCore ? `${customer}|${vtype}|${routePrefix}|${routeCore}${keySuffix}` : `${customer}|${vtype}|${route}`,
+    key: useFlashCore ? `${customer}|${vtype}|${routePrefix}|${routeCore}${keySuffix}` : `${customer}|${vtype}|${spxRouteCode}`,
     customer,
     vtype,
     route,
@@ -140,7 +157,7 @@ function getRouteIdentity(row) {
 
 function routeIdentityKey(row) {
   const identity = getRouteIdentity(row);
-  if (identity.isFlashRoute) return identity.key;
+  if (identity.isFlashRoute || isSpxCustomerName(identity.customer)) return identity.key;
   if (row && row.routeKey) return String(row.routeKey);
   return identity.key;
 }

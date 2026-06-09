@@ -1578,6 +1578,20 @@ function isFlashCustomer_(customer) {
   return text === 'FASH' || text.indexOf('FLASH') === 0;
 }
 
+function isSpxCustomer_(customer) {
+  var text = String(customer || '').trim().toUpperCase();
+  return text === 'SPX' || text.indexOf('SPX-') === 0;
+}
+
+function isTimedRouteCustomer_(customer) {
+  return isFlashCustomer_(customer) || isSpxCustomer_(customer);
+}
+
+function isRouteCodeLike_(value) {
+  var text = String(value || '').trim();
+  return !!text && text !== '-' && !/[\u0E00-\u0E7F]/.test(text) && /[-_]/.test(text) && /[A-Za-z0-9]/.test(text);
+}
+
 function parseTimedRouteParts_(route) {
   var rawRoute = String(route || '').trim();
   if (!rawRoute) return null;
@@ -1626,18 +1640,21 @@ function getRouteIdentity_(customer, vtype, route, routeDesc) {
       break;
     }
   }
-  var useFlashCore = !!(parsed && (isFlashCustomer_(c) || c === '-'));
+  var useFlashCore = !!(parsed && (isTimedRouteCustomer_(c) || c === '-'));
+  var spxRouteCode = isSpxCustomer_(c)
+    ? (isRouteCodeLike_(r) ? r : (isRouteCodeLike_(d) ? d : r))
+    : r;
   if (!useFlashCore) {
     return {
-      key: c + '|' + v + '|' + r,
+      key: c + '|' + v + '|' + spxRouteCode,
       customer: c,
       vtype: v,
       route: r,
-      routeCore: r,
+      routeCore: spxRouteCode,
       routeVehicle: v,
       routePrefix: '',
-      displayRoute: r,
-      routeDescription: r,
+      displayRoute: spxRouteCode,
+      routeDescription: spxRouteCode,
       isFlashRoute: false
     };
   }
@@ -1661,14 +1678,14 @@ function getRouteIdentity_(customer, vtype, route, routeDesc) {
 
 function getTripRouteKey_(trip) {
   var identity = getRouteIdentity_(trip && trip.customer, trip && trip.vtype, trip && trip.route, trip && trip.routeDesc);
-  if (identity.isFlashRoute) return identity.key;
+  if (identity.isFlashRoute || isSpxCustomer_(identity.customer)) return identity.key;
   if (trip && trip.routeKey) return trip.routeKey;
   return identity.key;
 }
 
 function getTripRouteDisplay_(trip) {
   var identity = getRouteIdentity_(trip && trip.customer, trip && trip.vtype, trip && trip.route, trip && trip.routeDesc);
-  if (identity.isFlashRoute) return identity.displayRoute;
+  if (identity.isFlashRoute || isSpxCustomer_(identity.customer)) return identity.displayRoute;
   if (trip && trip.routeGroup) return trip.routeGroup;
   return identity.displayRoute;
 }
@@ -1676,7 +1693,7 @@ function getTripRouteDisplay_(trip) {
 function ensureTripRouteIdentity_(trip) {
   if (!trip) return trip;
   var identity = getRouteIdentity_(trip.customer, trip.vtype, trip.route, trip.routeDesc);
-  if (identity.isFlashRoute || !trip.routeKey) {
+  if (identity.isFlashRoute || isSpxCustomer_(identity.customer) || !trip.routeKey) {
     trip.routeKey = identity.key;
     trip.routeCore = identity.routeCore;
     trip.routeVehicle = identity.routeVehicle;
