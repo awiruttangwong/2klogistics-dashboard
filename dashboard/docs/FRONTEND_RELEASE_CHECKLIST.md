@@ -42,7 +42,7 @@ Last updated: 2026-05-17
 
 - [ ] Open Netlify deploy history and confirm latest deploy is **Published** from `main`.
 - [ ] Open production URL:
-  - `https://2klogistics-dashboard.netlify.app/`
+  - `![1781074262722](image/FRONTEND_RELEASE_CHECKLIST/1781074262722.png)`
 - [ ] Hard refresh browser cache:
   - `Ctrl+F5`
 - [ ] Verify production reflects latest commit (UI/behavior changed as expected).
