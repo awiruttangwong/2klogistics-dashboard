@@ -6080,6 +6080,18 @@ body.sidebar-hover-transitioning .content.page-daily .dc-normal-summary {
   border-color: rgba(6, 182, 212, .26);
 }
 
+.dc-qa-badge.is-payBasePattern {
+  color: #d8b4fe;
+  background: rgba(168, 85, 247, .10);
+  border-color: rgba(168, 85, 247, .18);
+}
+
+.dc-qa-badge.is-recvBasePattern {
+  color: #67e8f9;
+  background: rgba(6, 182, 212, .10);
+  border-color: rgba(6, 182, 212, .18);
+}
+
 .dc-qa-badge.is-normal {
   color: #34d399;
   background: rgba(16, 185, 129, .14);
@@ -6330,6 +6342,15 @@ body.sidebar-hover-transitioning .content.page-daily .dc-normal-summary {
   background: rgba(59, 130, 246, .06);
 }
 
+.dc-qa-more-base {
+  color: #ffffff;
+  font-weight: 400;
+}
+
+.dc-qa-more-base:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, .04);
+}
 .dc-qa-empty {
   padding: 42px 18px;
   border: 1px solid rgba(148, 163, 184, .16);
@@ -6460,6 +6481,30 @@ body.sidebar-hover-transitioning .content.page-daily .dc-normal-summary {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden !important; /* Eliminate bottom horizontal scrollbar entirely */
+}
+
+.dc-qa-modal-section {
+  padding: 14px 0 0;
+}
+
+.dc-qa-modal-section-main {
+  padding-top: 0;
+}
+
+.dc-qa-modal-section + .dc-qa-modal-section {
+  margin-top: 18px;
+  border-top: 1px solid rgba(148, 163, 184, .12);
+}
+
+.dc-qa-modal-section-title {
+  margin: 0 0 12px;
+  padding: 0 16px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: 0;
+  text-align: left;
 }
 
 @media (max-width: 900px) {
