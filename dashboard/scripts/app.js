@@ -5955,8 +5955,9 @@ function buildDailyCompare(data) {
         });
         return row;
       }
-      function hCell(v) {
-        return { v: v, s: { font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 }, fill: { fgColor: { rgb: '1F2937' }, patternType: 'solid' }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: allBorders } };
+      function hCell(v, opts) {
+        opts = opts || {};
+        return { v: v, s: { font: { bold: true, color: { rgb: 'FFFFFF' }, sz: opts.sz || 11 }, fill: { fgColor: { rgb: '1F2937' }, patternType: 'solid' }, alignment: { horizontal: 'center', vertical: 'center', wrapText: opts.wrap !== false }, border: allBorders } };
       }
       function tCell(v) {
         return { v: v, s: { font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 13 }, fill: { fgColor: { rgb: '1F2937' }, patternType: 'solid' }, alignment: { horizontal: 'center', vertical: 'center' } } };
@@ -6600,30 +6601,53 @@ function buildDailyCompare(data) {
         { key: 'recvLow', name: 'ราคารับผิดปกติ' }
       ];
       const qaCheckboxSheetNames = new Set(qaCheckboxStatusSheetConfigs.map(s => s.name));
+      const qaSourceSheetByStatusKey = {
+        loss: qaCheckboxStatusSheetConfigs[0].name,
+        oil50: qaCheckboxStatusSheetConfigs[1].name,
+        payHigh: qaCheckboxStatusSheetConfigs[2].name,
+        payOilChanged: qaCheckboxStatusSheetConfigs[2].name,
+        recvLow: qaCheckboxStatusSheetConfigs[3].name,
+        recvOilChanged: qaCheckboxStatusSheetConfigs[3].name
+      };
+      const qaTrackedStatusKeys = ['loss', 'oil50', 'payHigh', 'payOilChanged', 'recvLow', 'recvOilChanged'];
+      const qaTrackedStatusConfigs = () => {
+        const labels = qaStatusLabels();
+        return qaTrackedStatusKeys.map(key => ({
+          key,
+          name: labels[key] || key,
+          sourceSheet: qaSourceSheetByStatusKey[key]
+        }));
+      };
       const qaCheckboxHeaders = ['โปร', 'ดันราคา/หารถไม่ได้'];
       const qaCheckboxCells = fill => qaCheckboxHeaders.map(() => cCell('☐', { fill, align: 'center', sz: 11 }));
       const qaFormulaSheetName = name => "'" + String(name || '').replace(/'/g, "''") + "'";
       const qaFormulaRange = (sheetName, col) => `${qaFormulaSheetName(sheetName)}!$${col}$4:$${col}$5000`;
       const qaFormulaMeta = _isSingleMode
-        ? { routeTypeCol: 'E', qaCols: ['M', 'N'] }
-        : { routeTypeCol: 'F', qaCols: ['N', 'O'] };
-      const qaHelperSheetName = 'QA_Helper';
+        ? { routeTypeCol: 'E', statusCol: 'L', qaCols: ['M', 'N'] }
+        : { routeTypeCol: 'F', statusCol: 'M', qaCols: ['N', 'O'] };
+      const qaHelperSheetName = 'Helper_ตรวจสอบ';
       const qaHelperRows = [];
       const qaHelperSheet = qaFormulaSheetName(qaHelperSheetName);
       const qaHelperRange = col => `${qaHelperSheet}!$${col}$2:$${col}$5000`;
-      const qaSheetTotalRoutesFormula = sheetName => `COUNTIF(${qaHelperRange('A')},"${sheetName}")`;
-      const qaSheetCheckedRoutesFormula = sheetName => `SUMIF(${qaHelperRange('A')},"${sheetName}",${qaHelperRange('G')})`;
-      const qaSheetCheckedRowsFormula = sheetName => `SUMIF(${qaHelperRange('A')},"${sheetName}",${qaHelperRange('H')})`;
-      const qaSheetReasonFormula = (sheetName, helperCol) => `SUMIF(${qaHelperRange('A')},"${sheetName}",${qaHelperRange(helperCol)})`;
+      const qaStatusTotalRoutesFormula = statusName => `COUNTIF(${qaHelperRange('B')},"${statusName}")`;
+      const qaStatusCheckedRoutesFormula = statusName => `SUMIF(${qaHelperRange('B')},"${statusName}",${qaHelperRange('G')})`;
+      const qaStatusCheckedRowsFormula = statusName => `SUMIF(${qaHelperRange('B')},"${statusName}",${qaHelperRange('H')})`;
+      const qaStatusReasonFormula = (statusName, helperCol) => `SUMIF(${qaHelperRange('B')},"${statusName}",${qaHelperRange(helperCol)})`;
+      const qaStatusTotalRowsFormula = statusName => `SUMIF(${qaHelperRange('B')},"${statusName}",${qaHelperRange('K')})`;
       const qaAllTotalRoutesFormula = () => `COUNTA(${qaHelperRange('F')})`;
       const qaAllCheckedRoutesFormula = () => `SUM(${qaHelperRange('G')})`;
       const qaAllCheckedRowsFormula = () => `SUM(${qaHelperRange('H')})`;
       const qaAllReasonFormula = helperCol => `SUM(${qaHelperRange(helperCol)})`;
-      const addQaHelperRoute = (sheetName, customer, route, vtype) => {
+      const qaAllTotalRowsFormula = () => `SUM(${qaHelperRange('K')})`;
+      const addQaHelperRoute = (sheetName, statusKey, customer, route, vtype) => {
         if (!qaCheckboxSheetNames.has(sheetName)) return;
-        const key = [sheetName, customer || '-', route || '-', vtype || '-'].join('|');
+        const trackedSourceSheet = qaSourceSheetByStatusKey[statusKey];
+        if (trackedSourceSheet !== sheetName) return;
+        const labels = qaStatusLabels();
+        const statusName = labels[statusKey] || statusKey;
+        const key = [sheetName, statusName, customer || '-', route || '-', vtype || '-'].join('|');
         if (qaHelperRows.some(row => row.key === key)) return;
-        qaHelperRows.push({ key, sheetName, customer: customer || '-', route: route || '-', vtype: vtype || '-' });
+        qaHelperRows.push({ key, sheetName, statusKey, statusName, customer: customer || '-', route: route || '-', vtype: vtype || '-' });
       };
 
       // ─── Sheet 1: สรุปผลดำเนินงาน (template-driven) ─────────────────────────────
@@ -6825,51 +6849,53 @@ function buildDailyCompare(data) {
         ws1Data.push([]);
         ws1Data.push([cCell('หมายเหตุการอ่านกราฟ: สัดส่วนอาจรวมเกิน 100% ได้ เพราะ 1 เที่ยวอาจพบได้มากกว่า 1 สถานะ', { color: '6B7280', sz: 9, wrap: true }), cCell(''), cCell(''), cCell(''), cCell('')]);
         ws1Data.push([]);
-        ws1Data.push([cCell('สรุปการตรวจของ QA', { bold: true, sz: 11, color: '111827' }), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell('')]);
-        ws1Data.push([cCell('ผูกกับช่อง QA ในชีท ขาดทุน, สำรองน้ำมัน > 50%, ราคาจ่ายผิดปกติ, ราคารับผิดปกติ โดยนับแถวที่มีค่า ☑ อย่างน้อย 1 ช่องเป็นรายการที่ QA เช็คแล้ว', { color: '6B7280', sz: 9, wrap: true }), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell('')]);
+        ws1Data.push([cCell('สรุปการตรวจสอบ', { bold: true, sz: 11, color: '111827' }), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell('')]);
+        ws1Data.push([cCell('ผูกกับช่องตรวจสอบในชีท ขาดทุน, สำรองน้ำมัน > 50%, ราคาจ่ายผิดปกติ, ราคารับผิดปกติ โดยแยกนับตาม tag ที่ตรวจพบ รวมถึงราคาจ่าย/ราคารับเปลี่ยนแปลงตามราคาน้ำมัน', { color: '6B7280', sz: 9, wrap: true }), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell('')]);
         ws1Data.push([hCell('รายการ'), hCell('ค่า'), hCell(''), hCell(''), hCell(''), hCell(''), hCell(''), hCell(''), hCell('')]);
         const qaTotalRoutesFormula = qaAllTotalRoutesFormula();
+        const qaTotalRowsFormula = qaAllTotalRowsFormula();
         const qaCheckedRoutesFormula = qaAllCheckedRoutesFormula();
         const qaCheckedRowsFormula = qaAllCheckedRowsFormula();
         const qaPromoFormula = qaAllReasonFormula('I');
         const qaPushOrNoCarFormula = qaAllReasonFormula('J');
         [
-          ['งานตรวจเส้นทางตามชีททั้งหมด', formulaCell(qaTotalRoutesFormula, { numFmt: '#,##0', align: 'right' })],
-          ['QA เช็คแล้ว', formulaCell(qaCheckedRoutesFormula, { numFmt: '#,##0', align: 'right', color: '16A34A' })],
+          ['งานตรวจสอบตามสถานะทั้งหมด', formulaCell(qaTotalRoutesFormula, { numFmt: '#,##0', align: 'right' })],
+          ['จำนวนเที่ยวในสถานะทั้งหมด', formulaCell(qaTotalRowsFormula, { numFmt: '#,##0', align: 'right' })],
+          ['ตรวจสอบแล้ว', formulaCell(qaCheckedRoutesFormula, { numFmt: '#,##0', align: 'right', color: '16A34A' })],
           ['ยังไม่เช็ค', formulaCell(`MAX((${qaTotalRoutesFormula})-(${qaCheckedRoutesFormula}),0)`, { numFmt: '#,##0', align: 'right', color: 'DC2626' })],
-          ['% ความคืบหน้า QA', formulaCell(`IFERROR((${qaCheckedRoutesFormula})/(${qaTotalRoutesFormula}),0)`, { numFmt: nPct, align: 'right' })],
-          ['เที่ยวที่ QA เช็คแล้ว', formulaCell(qaCheckedRowsFormula, { numFmt: '#,##0', align: 'right' })],
+          ['% ความคืบหน้าการตรวจสอบ', formulaCell(`IFERROR((${qaCheckedRoutesFormula})/(${qaTotalRoutesFormula}),0)`, { numFmt: nPct, align: 'right' })],
+          ['เที่ยวที่ตรวจสอบแล้ว', formulaCell(qaCheckedRowsFormula, { numFmt: '#,##0', align: 'right' })],
           ['โปร', formulaCell(qaPromoFormula, { numFmt: '#,##0', align: 'right' })],
           ['ดันราคา/หารถไม่ได้', formulaCell(qaPushOrNoCarFormula, { numFmt: '#,##0', align: 'right' })]
         ].forEach(([label, valueCell]) => {
           ws1Data.push([cCell(label, { bold: true }), valueCell, cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell('')]);
         });
         ws1Data.push([]);
-        ws1Data.push([cCell('ความคืบหน้า QA แยกตามสถานะ', { bold: true, sz: 10, color: '111827', fill: 'E5E7EB' }), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell('')]);
+        ws1Data.push([cCell('ความคืบหน้าการตรวจสอบแยกตามสถานะ', { bold: true, sz: 10, color: '111827', fill: 'E5E7EB' }), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell('')]);
         ws1Data.push([
-          hCell('สถานะ'),
-          hCell('งานตรวจเส้นทางตามชีท'),
-          hCell('เช็คแล้ว'),
-          hCell('ยังไม่เช็ค'),
-          hCell('% เช็คแล้ว'),
-          hCell('เที่ยวที่เช็คแล้ว'),
-          hCell('โปร'),
-          hCell('ดันราคา/หารถไม่ได้'),
-          hCell('')
+          hCell('สถานะ', { wrap: false, sz: 10 }),
+          hCell('งานตรวจสอบตามสถานะ', { wrap: false, sz: 10 }),
+          hCell('เช็คแล้ว', { wrap: false, sz: 10 }),
+          hCell('ยังไม่เช็ค', { wrap: false, sz: 10 }),
+          hCell('% เช็คแล้ว', { wrap: false, sz: 10 }),
+          hCell('จำนวนเที่ยวในสถานะ', { wrap: false, sz: 10 }),
+          hCell('เที่ยวที่เช็คแล้ว', { wrap: false, sz: 10 }),
+          hCell('โปร', { wrap: false, sz: 10 }),
+          hCell('ดันราคา/หารถไม่ได้', { wrap: false, sz: 10 }),
         ]);
-        qaCheckboxStatusSheetConfigs.forEach(config => {
-          const totalRoutesFormula = qaSheetTotalRoutesFormula(config.name);
-          const checkedRoutesFormula = qaSheetCheckedRoutesFormula(config.name);
+        qaTrackedStatusConfigs().forEach(config => {
+          const totalRoutesFormula = qaStatusTotalRoutesFormula(config.name);
+          const checkedRoutesFormula = qaStatusCheckedRoutesFormula(config.name);
           ws1Data.push([
             cCell(config.name, { bold: true }),
             formulaCell(totalRoutesFormula, { numFmt: '#,##0', align: 'right' }),
             formulaCell(checkedRoutesFormula, { numFmt: '#,##0', align: 'right', color: '16A34A' }),
             formulaCell(`MAX((${totalRoutesFormula})-(${checkedRoutesFormula}),0)`, { numFmt: '#,##0', align: 'right', color: 'DC2626' }),
             formulaCell(`IFERROR((${checkedRoutesFormula})/(${totalRoutesFormula}),0)`, { numFmt: nPct, align: 'right' }),
-            formulaCell(qaSheetCheckedRowsFormula(config.name), { numFmt: '#,##0', align: 'right' }),
-            formulaCell(qaSheetReasonFormula(config.name, 'I'), { numFmt: '#,##0', align: 'right' }),
-            formulaCell(qaSheetReasonFormula(config.name, 'J'), { numFmt: '#,##0', align: 'right' }),
-            cCell('')
+            formulaCell(qaStatusTotalRowsFormula(config.name), { numFmt: '#,##0', align: 'right' }),
+            formulaCell(qaStatusCheckedRowsFormula(config.name), { numFmt: '#,##0', align: 'right' }),
+            formulaCell(qaStatusReasonFormula(config.name, 'I'), { numFmt: '#,##0', align: 'right' }),
+            formulaCell(qaStatusReasonFormula(config.name, 'J'), { numFmt: '#,##0', align: 'right' })
           ]);
         });
       } else {
@@ -6893,51 +6919,53 @@ function buildDailyCompare(data) {
         ];
         rows.forEach(r => ws1Data.push(r));
         ws1Data.push([]);
-        ws1Data.push([cCell('สรุปการตรวจของ QA', { bold: true, sz: 11, color: '111827' }), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell('')]);
-        ws1Data.push([cCell('ผูกกับช่อง QA ในชีท ขาดทุน, สำรองน้ำมัน > 50%, ราคาจ่ายผิดปกติ, ราคารับผิดปกติ โดยนับแถวที่มีค่า ☑ อย่างน้อย 1 ช่องเป็นรายการที่ QA เช็คแล้ว', { color: '6B7280', sz: 9, wrap: true }), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell('')]);
+        ws1Data.push([cCell('สรุปการตรวจสอบ', { bold: true, sz: 11, color: '111827' }), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell('')]);
+        ws1Data.push([cCell('ผูกกับช่องตรวจสอบในชีท ขาดทุน, สำรองน้ำมัน > 50%, ราคาจ่ายผิดปกติ, ราคารับผิดปกติ โดยแยกนับตาม tag ที่ตรวจพบ รวมถึงราคาจ่าย/ราคารับเปลี่ยนแปลงตามราคาน้ำมัน', { color: '6B7280', sz: 9, wrap: true }), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell('')]);
         ws1Data.push([hCell('รายการ'), hCell('ค่า'), hCell(''), hCell(''), hCell(''), hCell(''), hCell(''), hCell(''), hCell('')]);
         const qaTotalRoutesFormula = qaAllTotalRoutesFormula();
+        const qaTotalRowsFormula = qaAllTotalRowsFormula();
         const qaCheckedRoutesFormula = qaAllCheckedRoutesFormula();
         const qaCheckedRowsFormula = qaAllCheckedRowsFormula();
         const qaPromoFormula = qaAllReasonFormula('I');
         const qaPushOrNoCarFormula = qaAllReasonFormula('J');
         [
-          ['งานตรวจเส้นทางตามชีททั้งหมด', formulaCell(qaTotalRoutesFormula, { numFmt: '#,##0', align: 'right' })],
-          ['QA เช็คแล้ว', formulaCell(qaCheckedRoutesFormula, { numFmt: '#,##0', align: 'right', color: '16A34A' })],
+          ['งานตรวจสอบตามสถานะทั้งหมด', formulaCell(qaTotalRoutesFormula, { numFmt: '#,##0', align: 'right' })],
+          ['จำนวนเที่ยวในสถานะทั้งหมด', formulaCell(qaTotalRowsFormula, { numFmt: '#,##0', align: 'right' })],
+          ['ตรวจสอบแล้ว', formulaCell(qaCheckedRoutesFormula, { numFmt: '#,##0', align: 'right', color: '16A34A' })],
           ['ยังไม่เช็ค', formulaCell(`MAX((${qaTotalRoutesFormula})-(${qaCheckedRoutesFormula}),0)`, { numFmt: '#,##0', align: 'right', color: 'DC2626' })],
-          ['% ความคืบหน้า QA', formulaCell(`IFERROR((${qaCheckedRoutesFormula})/(${qaTotalRoutesFormula}),0)`, { numFmt: nPct, align: 'right' })],
-          ['เที่ยวที่ QA เช็คแล้ว', formulaCell(qaCheckedRowsFormula, { numFmt: '#,##0', align: 'right' })],
+          ['% ความคืบหน้าการตรวจสอบ', formulaCell(`IFERROR((${qaCheckedRoutesFormula})/(${qaTotalRoutesFormula}),0)`, { numFmt: nPct, align: 'right' })],
+          ['เที่ยวที่ตรวจสอบแล้ว', formulaCell(qaCheckedRowsFormula, { numFmt: '#,##0', align: 'right' })],
           ['โปร', formulaCell(qaPromoFormula, { numFmt: '#,##0', align: 'right' })],
           ['ดันราคา/หารถไม่ได้', formulaCell(qaPushOrNoCarFormula, { numFmt: '#,##0', align: 'right' })]
         ].forEach(([label, valueCell]) => {
           ws1Data.push([cCell(label, { bold: true }), valueCell, cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell('')]);
         });
         ws1Data.push([]);
-        ws1Data.push([cCell('ความคืบหน้า QA แยกตามสถานะ', { bold: true, sz: 10, color: '111827', fill: 'E5E7EB' }), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell('')]);
+        ws1Data.push([cCell('ความคืบหน้าการตรวจสอบแยกตามสถานะ', { bold: true, sz: 10, color: '111827', fill: 'E5E7EB' }), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell('')]);
         ws1Data.push([
-          hCell('สถานะ'),
-          hCell('งานตรวจเส้นทางตามชีท'),
-          hCell('เช็คแล้ว'),
-          hCell('ยังไม่เช็ค'),
-          hCell('% เช็คแล้ว'),
-          hCell('เที่ยวที่เช็คแล้ว'),
-          hCell('โปร'),
-          hCell('ดันราคา/หารถไม่ได้'),
-          hCell('')
+          hCell('สถานะ', { wrap: false, sz: 10 }),
+          hCell('งานตรวจสอบตามสถานะ', { wrap: false, sz: 10 }),
+          hCell('เช็คแล้ว', { wrap: false, sz: 10 }),
+          hCell('ยังไม่เช็ค', { wrap: false, sz: 10 }),
+          hCell('% เช็คแล้ว', { wrap: false, sz: 10 }),
+          hCell('จำนวนเที่ยวในสถานะ', { wrap: false, sz: 10 }),
+          hCell('เที่ยวที่เช็คแล้ว', { wrap: false, sz: 10 }),
+          hCell('โปร', { wrap: false, sz: 10 }),
+          hCell('ดันราคา/หารถไม่ได้', { wrap: false, sz: 10 }),
         ]);
-        qaCheckboxStatusSheetConfigs.forEach(config => {
-          const totalRoutesFormula = qaSheetTotalRoutesFormula(config.name);
-          const checkedRoutesFormula = qaSheetCheckedRoutesFormula(config.name);
+        qaTrackedStatusConfigs().forEach(config => {
+          const totalRoutesFormula = qaStatusTotalRoutesFormula(config.name);
+          const checkedRoutesFormula = qaStatusCheckedRoutesFormula(config.name);
           ws1Data.push([
             cCell(config.name, { bold: true }),
             formulaCell(totalRoutesFormula, { numFmt: '#,##0', align: 'right' }),
             formulaCell(checkedRoutesFormula, { numFmt: '#,##0', align: 'right', color: '16A34A' }),
             formulaCell(`MAX((${totalRoutesFormula})-(${checkedRoutesFormula}),0)`, { numFmt: '#,##0', align: 'right', color: 'DC2626' }),
             formulaCell(`IFERROR((${checkedRoutesFormula})/(${totalRoutesFormula}),0)`, { numFmt: nPct, align: 'right' }),
-            formulaCell(qaSheetCheckedRowsFormula(config.name), { numFmt: '#,##0', align: 'right' }),
-            formulaCell(qaSheetReasonFormula(config.name, 'I'), { numFmt: '#,##0', align: 'right' }),
-            formulaCell(qaSheetReasonFormula(config.name, 'J'), { numFmt: '#,##0', align: 'right' }),
-            cCell('')
+            formulaCell(qaStatusTotalRowsFormula(config.name), { numFmt: '#,##0', align: 'right' }),
+            formulaCell(qaStatusCheckedRowsFormula(config.name), { numFmt: '#,##0', align: 'right' }),
+            formulaCell(qaStatusReasonFormula(config.name, 'I'), { numFmt: '#,##0', align: 'right' }),
+            formulaCell(qaStatusReasonFormula(config.name, 'J'), { numFmt: '#,##0', align: 'right' })
           ]);
         });
       }
@@ -6957,8 +6985,8 @@ function buildDailyCompare(data) {
       const ws1 = XLSX.utils.aoa_to_sheet(ws1Data);
       const ws1ColumnCount = 9;
       ws1['!cols'] = _isSingleMode
-        ? [{ wch: 34 }, { wch: 42 }, { wch: 18 }, { wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 24 }, { wch: 8 }]
-        : [{ wch: 46 }, { wch: 30 }, { wch: 30 }, { wch: 38 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 24 }, { wch: 8 }];
+        ? [{ wch: 34 }, { wch: 24 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 22 }, { wch: 18 }, { wch: 10 }, { wch: 24 }]
+        : [{ wch: 34 }, { wch: 24 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 22 }, { wch: 18 }, { wch: 10 }, { wch: 24 }];
       ws1['!rows'] = ws1Data.map((_, idx) => {
         if (idx === 0) return { hpt: 32 };
         return {};
@@ -6983,9 +7011,9 @@ function buildDailyCompare(data) {
             firstText.startsWith('สรุปตามสถานะ') ||
             firstText.startsWith('สัดส่วนต่อเที่ยวทั้งหมด') ||
             firstText.startsWith('หมายเหตุการอ่านกราฟ') ||
-            firstText.startsWith('สรุปการตรวจของ QA') ||
-            firstText.startsWith('ผูกกับช่อง QA') ||
-            firstText.startsWith('ความคืบหน้า QA แยกตามสถานะ');
+            firstText.startsWith('สรุปการตรวจสอบ') ||
+            firstText.startsWith('ผูกกับช่องตรวจสอบ') ||
+            firstText.startsWith('ความคืบหน้าการตรวจสอบแยกตามสถานะ');
           if (!shouldMergeVisualRow) return;
           ws1Merges.push({ s: { r: idx, c: 0 }, e: { r: idx, c: ws1ColumnCount - 1 } });
           ws1['!rows'][idx] = firstText.startsWith('หมายเหตุการอ่านกราฟ')
@@ -7115,7 +7143,9 @@ function buildDailyCompare(data) {
               ];
               if (hasQaCheckboxColumns) {
                 qaCheckboxRows.push(ws4Data.length);
-                addQaHelperRoute(sheetTitle, qaCustomerVal, qaRouteVal, qaVtypeVal);
+                displayStatuses
+                  .filter(statusKey => qaSourceSheetByStatusKey[statusKey] === sheetTitle)
+                  .forEach(statusKey => addQaHelperRoute(sheetTitle, statusKey, qaCustomerVal, qaRouteVal, qaVtypeVal));
               }
               ws4Data.push(row);
               rowIdx4++;
@@ -7471,7 +7501,9 @@ function buildDailyCompare(data) {
                 ];
                 if (hasQaCheckboxColumns) {
                   qaCheckboxRows.push(wsData.length);
-                  addQaHelperRoute(sheetTitle, qaCustomerVal, qaRouteVal, qaVtypeVal);
+                  displayStatuses
+                    .filter(statusKey => qaSourceSheetByStatusKey[statusKey] === sheetTitle)
+                    .forEach(statusKey => addQaHelperRoute(sheetTitle, statusKey, qaCustomerVal, qaRouteVal, qaVtypeVal));
                 }
                 wsData.push(row);
               } else {
@@ -7647,7 +7679,8 @@ function buildDailyCompare(data) {
           hCell('เช็คแล้ว'),
           hCell('เที่ยวที่เช็คแล้ว'),
           hCell('โปร'),
-          hCell('ดันราคา/หารถไม่ได้')
+          hCell('ดันราคา/หารถไม่ได้'),
+          hCell('เที่ยวในสถานะ')
         ]];
         qaHelperRows.forEach((item, idx) => {
           const rowNum = idx + 2;
@@ -7655,14 +7688,15 @@ function buildDailyCompare(data) {
           const sourceCustomer = qaFormulaRange(sourceSheet, 'A');
           const sourceRoute = qaFormulaRange(sourceSheet, 'B');
           const sourceVtype = qaFormulaRange(sourceSheet, qaFormulaMeta.routeTypeCol);
+          const sourceStatus = qaFormulaRange(sourceSheet, qaFormulaMeta.statusCol);
           const sourcePromo = qaFormulaRange(sourceSheet, qaFormulaMeta.qaCols[0]);
           const sourcePushOrNoCar = qaFormulaRange(sourceSheet, qaFormulaMeta.qaCols[1]);
-          const criteria = `${sourceCustomer},$C${rowNum},${sourceRoute},$D${rowNum},${sourceVtype},$E${rowNum}`;
+          const criteria = `${sourceCustomer},$C${rowNum},${sourceRoute},$D${rowNum},${sourceVtype},$E${rowNum},${sourceStatus},"*"&$B${rowNum}&"*"`;
           const checkedTripsFormula =
-            `SUMPRODUCT(--(${sourceCustomer}=$C${rowNum}),--(${sourceRoute}=$D${rowNum}),--(${sourceVtype}=$E${rowNum}),--(((${sourcePromo}="☑")+(${sourcePushOrNoCar}="☑"))>0))`;
+            `SUMPRODUCT(--(${sourceCustomer}=$C${rowNum}),--(${sourceRoute}=$D${rowNum}),--(${sourceVtype}=$E${rowNum}),--ISNUMBER(SEARCH($B${rowNum},${sourceStatus})),--(((${sourcePromo}="☑")+(${sourcePushOrNoCar}="☑"))>0))`;
           helperData.push([
             cCell(item.sheetName),
-            cCell(item.sheetName),
+            cCell(item.statusName),
             cCell(item.customer),
             cCell(item.route),
             cCell(item.vtype),
@@ -7670,16 +7704,17 @@ function buildDailyCompare(data) {
             formulaCell(`--((I${rowNum}+J${rowNum})>0)`, { numFmt: '#,##0', align: 'right' }),
             formulaCell(checkedTripsFormula, { numFmt: '#,##0', align: 'right' }),
             formulaCell(`COUNTIFS(${criteria},${sourcePromo},"☑")`, { numFmt: '#,##0', align: 'right' }),
-            formulaCell(`COUNTIFS(${criteria},${sourcePushOrNoCar},"☑")`, { numFmt: '#,##0', align: 'right' })
+            formulaCell(`COUNTIFS(${criteria},${sourcePushOrNoCar},"☑")`, { numFmt: '#,##0', align: 'right' }),
+            formulaCell(`COUNTIFS(${criteria})`, { numFmt: '#,##0', align: 'right' })
           ]);
         });
         if (helperData.length === 1) {
-          helperData.push([cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(0), cCell(0), cCell(0), cCell(0)]);
+          helperData.push([cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(0), cCell(0), cCell(0), cCell(0), cCell(0)]);
         }
         const ws = XLSX.utils.aoa_to_sheet(helperData);
         ws['!cols'] = [
           { wch: 24 }, { wch: 24 }, { wch: 18 }, { wch: 34 }, { wch: 16 },
-          { wch: 44 }, { wch: 12 }, { wch: 18 }, { wch: 10 }, { wch: 24 }
+          { wch: 44 }, { wch: 12 }, { wch: 18 }, { wch: 10 }, { wch: 24 }, { wch: 16 }
         ];
         ws['!freeze'] = { xSplit: 0, ySplit: 1, topLeftCell: 'A2', activePane: 'bottomLeft', state: 'frozen' };
         return ws;
