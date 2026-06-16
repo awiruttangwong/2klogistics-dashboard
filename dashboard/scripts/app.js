@@ -6615,17 +6615,18 @@ function buildDailyCompare(data) {
 
         // Section 3: Anomaly breakdown by status
         ws1Data.push([]);
-        ws1Data.push([cCell('แยกตามประเภทความผิดปกติ', { bold: true, sz: 11, color: '111827' }), cCell(''), cCell(''), cCell(''), cCell('')]);
-        ws1Data.push([hCell('สถานะ'), hCell('จำนวนเที่ยว'), hCell('สัดส่วน'), hCell('มูลค่าผลกระทบ (บาท)'), hCell('หมายเหตุ')]);
+        ws1Data.push([cCell('แยกตามสถานะที่ตรวจพบ', { bold: true, sz: 11, color: '111827' }), cCell(''), cCell(''), cCell(''), cCell('')]);
+        ws1Data.push([cCell('หมายเหตุ: 1 เที่ยวอาจพบได้มากกว่า 1 สถานะ จึงทำให้ผลรวมของสัดส่วนต่อเที่ยวทั้งหมดมากกว่า 100% ได้', { color: '6B7280', wrap: true }), cCell(''), cCell(''), cCell(''), cCell('')]);
+        ws1Data.push([hCell('สถานะ'), hCell('จำนวนเที่ยว'), hCell('สัดส่วนต่อเที่ยวทั้งหมด'), hCell('รายงานการเงิน (บาท)'), hCell('หมายเหตุ')]);
         const totalForPct = _stA.trips || 0;
         const pctOf = (n) => totalForPct > 0 ? n / totalForPct : 0;
         const impactNoteMap = {
           loss: 'รวมมูลค่าขาดทุนจากเที่ยวที่ส่วนต่างติดลบ (คำนวณจากค่าส่วนต่างที่ติดลบของแต่ละเที่ยว)',
           oil50: 'รวมเฉพาะส่วนที่สำรองน้ำมันเกิน 50% ของราคาจ่าย (คำนวณจากสำรองน้ำมัน - 50% ของราคาจ่าย)',
-          payHigh: 'รวมผลต่างราคาจ่ายระหว่างวันหลักกับวันอ้างอิง (คำนวณจากผลต่างระหว่างราคาจ่ายวันหลักและวันอ้างอิง)',
-          payOilChanged: 'รวมผลต่างราคาจ่ายของคู่ที่ราคาน้ำมันเปลี่ยนแปลง (คำนวณจากผลต่างระหว่างราคาจ่ายวันหลักและวันอ้างอิง)',
-          recvLow: 'รวมผลต่างราคารับระหว่างวันหลักกับวันอ้างอิง (คำนวณจากผลต่างระหว่างราคารับวันหลักและวันอ้างอิง)',
-          recvOilChanged: 'รวมผลต่างราคารับของคู่ที่ราคาน้ำมันเปลี่ยนแปลง (คำนวณจากผลต่างระหว่างราคารับวันหลักและวันอ้างอิง)',
+          payHigh: 'รวมผลต่างราคาจ่ายระหว่างวันที่หลักกับวันที่อ้างอิง (คำนวณจากผลต่างระหว่างราคาจ่ายวันที่หลักและวันที่อ้างอิง)',
+          payOilChanged: 'รวมผลต่างราคาจ่ายของคู่ที่ราคาน้ำมันเปลี่ยนแปลง (คำนวณจากผลต่างระหว่างราคาจ่ายวันที่หลักและวันที่อ้างอิง)',
+          recvLow: 'รวมผลต่างราคารับระหว่างวันที่หลักกับวันที่อ้างอิง (คำนวณจากผลต่างระหว่างราคารับวันที่หลักและวันที่อ้างอิง)',
+          recvOilChanged: 'รวมผลต่างราคารับของคู่ที่ราคาน้ำมันเปลี่ยนแปลง (คำนวณจากผลต่างระหว่างราคารับวันที่หลักและวันที่อ้างอิง)',
           normal: '-',
           noRef: '-'
         };
@@ -6701,7 +6702,7 @@ function buildDailyCompare(data) {
       const ws1 = XLSX.utils.aoa_to_sheet(ws1Data);
       const ws1ColumnCount = _isSingleMode ? 5 : 4;
       ws1['!cols'] = _isSingleMode
-        ? [{ wch: 34 }, { wch: 14 }, { wch: 12 }, { wch: 22 }, { wch: 90 }]
+        ? [{ wch: 34 }, { wch: 14 }, { wch: 24 }, { wch: 22 }, { wch: 90 }]
         : [{ wch: 46 }, { wch: 30 }, { wch: 30 }, { wch: 38 }];
       ws1['!rows'] = ws1Data.map((_, idx) => {
         if (idx === 0) return { hpt: 32 };
@@ -6713,6 +6714,13 @@ function buildDailyCompare(data) {
         { s: { r: 0, c: 0 }, e: { r: 0, c: ws1ColumnCount - 1 } }
       ];
       if (_isSingleMode) {
+        const overlapNoteRow = ws1Data.findIndex(row =>
+          String(row?.[0]?.v || row?.[0] || '').includes('1 เที่ยวอาจพบได้มากกว่า 1 สถานะ')
+        );
+        if (overlapNoteRow >= 0) {
+          ws1Merges.push({ s: { r: overlapNoteRow, c: 0 }, e: { r: overlapNoteRow, c: ws1ColumnCount - 1 } });
+          ws1['!rows'][overlapNoteRow] = { hpt: 18 };
+        }
         ws1Merges.push({ s: { r: 4, c: 1 }, e: { r: 4, c: ws1ColumnCount - 1 } });
       }
       const bottomEndIdx = ws1Data.length - 1;
