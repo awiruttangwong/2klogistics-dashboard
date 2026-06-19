@@ -77,6 +77,84 @@ function normalizeText(value, fallback = '-') {
   return text || fallback;
 }
 
+function normalizeVehicleType(value, fallback = '-') {
+  const text = normalizeText(value, '');
+  if (!text) return fallback;
+  const upper = text.toUpperCase();
+  if (upper === 'BTS') return '4W';
+  return text;
+}
+
+function isMissingVehicleType(value) {
+  const text = String(value == null ? '' : value).trim();
+  return !text || text === '-';
+}
+
+function vehicleTypeLookupRoute(row) {
+  return normalizeText(
+    row?.route ?? row?.routeGroup ?? row?.displayRoute ?? row?.routeCore ?? row?.routeDesc ?? row?.desc ?? row?.name ?? '',
+    ''
+  ).replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
+function vehicleTypeLookupKey(row) {
+  const customer = mapCustomer(normalizeText(row?.customer, '-'));
+  const route = vehicleTypeLookupRoute(row);
+  return route ? `${customer}\u0001${route}` : '';
+}
+
+function vehicleTypePlateKey(row) {
+  return normalizeText(row?.plate, '').toUpperCase().replace(/\s+/g, '');
+}
+
+function inferVehicleTypeFromRouteCode(row) {
+  const candidates = [row?.route, row?.routeGroup, row?.displayRoute, row?.routeCore, row?.routeDesc, row?.desc, row?.name];
+  for (const value of candidates) {
+    const parsed = parseTimedRouteParts(value);
+    if (parsed?.vehicle) return normalizeVehicleType(parsed.vehicle, '');
+  }
+  return '';
+}
+
+function inferMissingVehicleTypes(rows) {
+  const sourceRows = Array.isArray(rows) ? rows : [];
+  const routeVehicles = new Map();
+  const plateVehicles = new Map();
+  sourceRows.forEach(row => {
+    const key = vehicleTypeLookupKey(row);
+    if (isMissingVehicleType(row?.vtype)) return;
+    const vtype = normalizeVehicleType(row?.vtype, '');
+    if (!vtype || vtype === '-') return;
+    if (key) {
+      if (!routeVehicles.has(key)) routeVehicles.set(key, new Map());
+      const routeCounts = routeVehicles.get(key);
+      routeCounts.set(vtype, (routeCounts.get(vtype) || 0) + Math.max(1, toFiniteNumber(row?.trips, 1)));
+    }
+    const plateKey = vehicleTypePlateKey(row);
+    if (plateKey) {
+      if (!plateVehicles.has(plateKey)) plateVehicles.set(plateKey, new Map());
+      const plateCounts = plateVehicles.get(plateKey);
+      plateCounts.set(vtype, (plateCounts.get(vtype) || 0) + Math.max(1, toFiniteNumber(row?.trips, 1)));
+    }
+  });
+
+  return sourceRows.map(row => {
+    const normalizedVtype = normalizeVehicleType(row?.vtype, '-');
+    if (!isMissingVehicleType(row?.vtype)) return { ...row, vtype: normalizedVtype };
+
+    const routeCodeVtype = inferVehicleTypeFromRouteCode(row);
+    if (routeCodeVtype) return { ...row, vtype: routeCodeVtype };
+
+    const plateCounts = plateVehicles.get(vehicleTypePlateKey(row));
+    if (plateCounts && plateCounts.size === 1) return { ...row, vtype: [...plateCounts.keys()][0] };
+
+    const counts = routeVehicles.get(vehicleTypeLookupKey(row));
+    if (!counts || counts.size !== 1) return { ...row, vtype: '-' };
+
+    return { ...row, vtype: [...counts.keys()][0] };
+  });
+}
+
 function isFlashCustomerName(value) {
   const text = String(value || '').trim().toUpperCase();
   return text === 'FASH' || text.startsWith('FLASH');
@@ -116,7 +194,7 @@ function parseTimedRouteParts(route) {
 function getRouteIdentity(row) {
   const customer = mapCustomer(normalizeText(row?.customer, '-'));
   const route = normalizeText(row?.route, '-');
-  const vtype = normalizeText(row?.vtype, '-');
+  const vtype = normalizeVehicleType(row?.vtype, '-');
   const routeDesc = normalizeText(row?.routeDesc ?? row?.desc ?? '', '');
   const routeName = normalizeText(row?.routeName ?? row?.name ?? '', '');
   const parsedCandidate = [
@@ -399,25 +477,58 @@ function getMonthNameFromDate(dateStr) {
 }
 function getMonthlyStatsFromDaily(d, monthName) {
   const daily = Array.isArray(d?.daily) ? d.daily : [];
-  let trips = 0, recv = 0, margin = 0, found = false;
+  let trips = 0, recv = 0, pay = 0, margin = 0, found = false;
+  let payFound = false, marginFound = false;
   if (daily.length > 0) {
     daily.forEach(day => {
       if (!Array.isArray(day?.rows)) return;
       day.rows.forEach(r => {
         if (getMonthNameFromDate(r.date) !== monthName) return;
         const rcv = Number(r.recv) || 0;
-        const pay = Number(r.pay) || 0;
         const oil = Number(r.oil) || 0;
         const mgRaw = Number(r.margin);
-        const mg = Number.isFinite(mgRaw) ? mgRaw : (rcv - pay - oil);
+        const payRaw = Number(r.pay);
+        if (Number.isFinite(payRaw)) payFound = true;
+        if (Number.isFinite(mgRaw)) marginFound = true;
+        const payValue = Number.isFinite(payRaw)
+          ? payRaw
+          : (Number.isFinite(mgRaw) ? Math.max(rcv - oil - mgRaw, 0) : 0);
+        const mg = Number.isFinite(mgRaw) ? mgRaw : (rcv - payValue - oil);
         trips += 1;
         recv += rcv;
+        pay += payValue;
         margin += mg;
         found = true;
       });
     });
   }
-  return found ? { trips, recv, margin } : null;
+  return found ? { trips, recv, pay, margin, payFound, marginFound } : null;
+}
+
+function getMonthlyStatsFromRouteTrend(d, monthName) {
+  return (Array.isArray(d?.routeTrend) ? d.routeTrend : []).reduce((sum, row) => {
+    const monthData = row.months?.[monthName] || {};
+    const payValue = Number(monthData.pay);
+    const oilValue = Number(monthData.oil);
+    const marginValue = Number(monthData.margin);
+    const recvValue = Number(monthData.recv);
+    const oil = Number.isFinite(oilValue) ? oilValue : 0;
+    const margin = Number.isFinite(marginValue) ? marginValue : 0;
+    const recv = Number.isFinite(recvValue)
+      ? recvValue
+      : ((Number.isFinite(payValue) ? payValue : 0) + oil + margin);
+    const pay = Number.isFinite(payValue) && Math.abs(payValue) > 0
+      ? payValue
+      : (Number.isFinite(recvValue) && Number.isFinite(marginValue)
+        ? Math.max(recv - oil - margin, 0)
+        : 0);
+    return {
+      trips: sum.trips + (Number(monthData.trips) || 0),
+      recv: sum.recv + recv,
+      pay: sum.pay + pay,
+      margin: sum.margin + margin
+    };
+  }, { trips: 0, recv: 0, pay: 0, margin: 0 });
 }
 
 function canonicalizeTripRow(row) {
@@ -432,7 +543,7 @@ function canonicalizeTripRow(row) {
     customer: mapCustomer(normalizeText(row?.customer, '-')),
     route: normalizeText(row?.route, '-'),
     routeDesc: normalizeText(row?.routeDesc, '-'),
-    vtype: normalizeText(row?.vtype, '-'),
+    vtype: normalizeVehicleType(row?.vtype, '-'),
     driver: normalizeText(row?.driver, '-'),
     plate: normalizeText(row?.plate, '-'),
     payee: normalizeText(row?.payee, '-'),
@@ -629,6 +740,25 @@ function deriveOwnVsOutsourceFromTrips(trips) {
   return { company, outsource };
 }
 
+function deriveVehicleTypeFromTrips(trips) {
+  const groups = {};
+  (Array.isArray(trips) ? trips : []).forEach(rawTrip => {
+    const trip = canonicalizeTripRow(rawTrip);
+    const type = normalizeVehicleType(trip.vtype, '-');
+    if (!groups[type]) {
+      groups[type] = { type, vtype: type, trips: 0, margin: 0, recv: 0, pay: 0, oil: 0, loss: 0 };
+    }
+    const bucket = groups[type];
+    bucket.trips += 1;
+    bucket.margin += trip.margin;
+    bucket.recv += trip.recv;
+    bucket.pay += trip.pay;
+    bucket.oil += trip.oil;
+    if (trip.margin < 0) bucket.loss += 1;
+  });
+  return regroupVehicleTypeRows(Object.values(groups));
+}
+
 function deriveLossTripFromTrips(trips) {
   const lossTrips = trips
     .map(canonicalizeTripRow)
@@ -755,11 +885,11 @@ function regroupLossByCustomer(lossTrip) {
 
 function regroupRouteRows(rows, sortFn) {
   const groups = {};
-  (rows || []).forEach(row => {
+  inferMissingVehicleTypes(rows || []).forEach(row => {
     const normalized = {
       ...row,
       customer: mapCustomer(row?.customer || '-'),
-      vtype: normalizeText(row?.vtype, '-')
+      vtype: normalizeVehicleType(row?.vtype, '-')
     };
     const identity = getRouteIdentity(normalized);
     const key = identity.key;
@@ -803,6 +933,34 @@ function regroupRouteRows(rows, sortFn) {
     pct: row.recv > 0 ? row.margin / row.recv * 100 : toFiniteNumber(row.pct)
   }));
   return sortFn ? result.sort(sortFn) : result;
+}
+
+function regroupVehicleTypeRows(rows) {
+  const groups = {};
+  (rows || []).forEach(row => {
+    const type = normalizeVehicleType(row?.type ?? row?.vtype, '-');
+    if (isMissingVehicleType(type)) return;
+    if (!groups[type]) {
+      groups[type] = { type, vtype: type, trips: 0, margin: 0, recv: 0, pay: 0, oil: 0, loss: 0 };
+    }
+    const target = groups[type];
+    target.trips += toFiniteNumber(row?.trips);
+    target.margin += toFiniteNumber(row?.margin);
+    target.recv += toFiniteNumber(row?.recv);
+    target.pay += toFiniteNumber(row?.pay);
+    target.oil += toFiniteNumber(row?.oil);
+    target.loss += toFiniteNumber(row?.loss);
+  });
+  const totalTrips = Object.values(groups).reduce((sum, row) => sum + row.trips, 0);
+  return Object.values(groups)
+    .map(row => ({
+      ...row,
+      share: totalTrips > 0 ? row.trips / totalTrips * 100 : 0,
+      avgRecv: row.trips > 0 ? row.recv / row.trips : 0,
+      avgMargin: row.trips > 0 ? row.margin / row.trips : 0,
+      pct: row.recv > 0 ? row.margin / row.recv * 100 : 0
+    }))
+    .sort((a, b) => b.trips - a.trips);
 }
 
 function regroupRouteRanking(ranking) {
@@ -855,6 +1013,9 @@ function normalizeSummaryData(data) {
   if (Array.isArray(data.customerProfit)) {
     data.customerProfit = regroupCustomerProfit(data.customerProfit);
   }
+  if (Array.isArray(data.vehicleType)) {
+    data.vehicleType = regroupVehicleTypeRows(data.vehicleType);
+  }
   if (data.revenueConcentration) {
     data.revenueConcentration = regroupRevenueConcentration(data.revenueConcentration);
   }
@@ -871,11 +1032,14 @@ function normalizeSummaryData(data) {
     });
   }
   if (Array.isArray(data.daily)) {
+    const inferredDailyRows = inferMissingVehicleTypes(data.daily.flatMap(day => Array.isArray(day?.rows) ? day.rows : []));
+    let inferredIndex = 0;
     data.daily.forEach(day => {
       if (Array.isArray(day?.rows)) {
         day.rows = day.rows.map(row => ({
-          ...row,
-          customer: mapCustomer(row?.customer)
+          ...inferredDailyRows[inferredIndex++],
+          customer: mapCustomer(row?.customer),
+          vtype: normalizeVehicleType(inferredDailyRows[inferredIndex - 1]?.vtype, '-')
         }));
       }
     });
@@ -885,8 +1049,12 @@ function normalizeSummaryData(data) {
 
 function alignDashboardData(summaryData, tripRows, opts = {}) {
   const data = deepClone(summaryData) || {};
-  const trips = Array.isArray(tripRows) ? tripRows.map(canonicalizeTripRow) : [];
+  const trips = Array.isArray(tripRows) ? inferMissingVehicleTypes(tripRows).map(canonicalizeTripRow) : [];
   normalizeSummaryData(data);
+
+  if (trips.length > 0) {
+    data.vehicleType = deriveVehicleTypeFromTrips(trips);
+  }
 
   if (opts.rebuildDerived === true && trips.length > 0) {
     data.customerProfit = deriveCustomerProfitFromTrips(trips);
@@ -2334,25 +2502,20 @@ function buildFullTrend(d) {
   const monthCount = activeMonths.length;
   const monthsToShow = activeMonths;
 
-  // Monthly aggregates from routeTrend (only for active months)
-  const monthTrips = monthsToShow.map(m => d.routeTrend.reduce((a, r) => a + (r.months[m]?.trips || 0), 0));
-  const monthRevenue = monthsToShow.map(m => {
-    const dailyStat = getMonthlyStatsFromDaily(d, m);
-    if (dailyStat) return dailyStat.recv;
-    return d.routeTrend.reduce((sum, row) => {
-      const monthData = row.months?.[m] || {};
-      const recvValue = Number(monthData.recv);
-      if (Number.isFinite(recvValue)) return sum + recvValue;
-      return sum + (Number(monthData.pay) || 0) + (Number(monthData.oil) || 0) + (Number(monthData.margin) || 0);
-    }, 0);
-  });
-  const monthMargins = monthsToShow.map(m => d.routeTrend.reduce((a, r) => a + (r.months[m]?.margin || 0), 0));
+  // Monthly overview uses routeTrend.months as the single aggregate source
+  // so recv/pay/margin/trips stay on the same monthly basis.
+  const monthStats = monthsToShow.map(m => getMonthlyStatsFromRouteTrend(d, m));
+  const monthTrips = monthStats.map(stat => stat.trips || 0);
+  const monthRevenue = monthStats.map(stat => stat.recv || 0);
+  const monthPays = monthStats.map(stat => stat.pay || 0);
+  const monthMargins = monthStats.map(stat => stat.margin || 0);
   const monthLabels = monthsToShow.map(m => MTH[m] || m);
   const tripsDelta = monthTrips.length > 1 ? calcMoMDeltaPct(monthTrips[monthTrips.length - 1], monthTrips[monthTrips.length - 2]) : null;
   const revenueDelta = monthRevenue.length > 1 ? calcMoMDeltaPct(monthRevenue[monthRevenue.length - 1], monthRevenue[monthRevenue.length - 2]) : null;
   const marginDelta = monthMargins.length > 1 ? calcMoMDeltaPct(monthMargins[monthMargins.length - 1], monthMargins[monthMargins.length - 2], true) : null;
   const monthPct = monthRevenue.map((recv, i) => recv > 0 ? (monthMargins[i] / recv) * 100 : null);
   const avgPctDelta = monthPct.length > 1 ? calcMoMDeltaPct(monthPct[monthPct.length - 1], monthPct[monthPct.length - 2], true) : null;
+  const totalMonthlyPay = monthPays.reduce((sum, value) => sum + (Number(value) || 0), 0);
 
   // Build delta HTML helpers
   const deltaHtml = (delta, direction) => {
@@ -2391,7 +2554,7 @@ function buildFullTrend(d) {
     <div class="mvw-hero" style="--mvw-color:#3b82f6;--mvw-rgb:59,130,246;">
       <div>
         <div class="mvw-hero-title">สรุปภาพรวมและดัชนีชี้วัดผลประกอบการหลัก</div>
-        <div class="mvw-hero-desc">รายงานสรุปผลประกอบการรายเดือน วิเคราะห์แนวโน้มเที่ยววิ่ง รายได้ ส่วนต่างกำไร และอัตรากำไร พร้อมระบุเดือนที่ทำผลงานสูงสุดและต่ำสุดเพื่อการตัดสินใจเชิงกลยุทธ์</div>
+        <div class="mvw-hero-desc">รายงานสรุปผลประกอบการรายเดือน วิเคราะห์แนวโน้มเที่ยววิ่ง รายได้ ส่วนต่างกำไร และอัตรากำไร</div>
       </div>
       <div class="mvw-hero-meta">
         <span class="mvw-hero-meta-label">ช่วงข้อมูล</span>
@@ -2428,28 +2591,28 @@ function buildFullTrend(d) {
       <div class="mvw-insight" style="--mvw-ins-color:#3b82f6;">
         <span class="mvw-insight-dot"></span>
         <div class="mvw-insight-body">
-          <span class="mvw-insight-label">เดือนเที่ยวสูงสุด</span>
+          <span class="mvw-insight-label">เดือนที่มีจำนวนเที่ยวสูงสุด</span>
           <span class="mvw-insight-value">${tripsMaxIdx >= 0 ? `${monthLabels[tripsMaxIdx]} <b>${fmtB(monthTrips[tripsMaxIdx])} เที่ยว</b>` : '-'}</span>
         </div>
       </div>
       <div class="mvw-insight" style="--mvw-ins-color:#94a3b8;">
         <span class="mvw-insight-dot"></span>
         <div class="mvw-insight-body">
-          <span class="mvw-insight-label">เดือนเที่ยวต่ำสุด</span>
+          <span class="mvw-insight-label">เดือนที่มีจำนวนเที่ยวต่ำสุด</span>
           <span class="mvw-insight-value">${tripsMinIdx >= 0 ? `${monthLabels[tripsMinIdx]} <b>${fmtB(monthTrips[tripsMinIdx])} เที่ยว</b>` : '-'}</span>
         </div>
       </div>
       <div class="mvw-insight" style="--mvw-ins-color:#22c55e;">
         <span class="mvw-insight-dot"></span>
         <div class="mvw-insight-body">
-          <span class="mvw-insight-label">เดือนกำไรสูงสุด</span>
+          <span class="mvw-insight-label">เดือนที่มีส่วนต่างสูงสุด</span>
           <span class="mvw-insight-value">${marginMaxIdx >= 0 ? `${monthLabels[marginMaxIdx]} <b>${fmt(monthMargins[marginMaxIdx])} THB</b>` : '-'}</span>
         </div>
       </div>
       <div class="mvw-insight" style="--mvw-ins-color:#ef4444;">
         <span class="mvw-insight-dot"></span>
         <div class="mvw-insight-body">
-          <span class="mvw-insight-label">เดือนกำไรต่ำสุด</span>
+          <span class="mvw-insight-label">เดือนที่มีส่วนต่างต่ำสุด</span>
           <span class="mvw-insight-value">${marginMinIdx >= 0 ? `${monthLabels[marginMinIdx]} <b>${fmt(monthMargins[marginMinIdx])} THB</b>` : '-'}</span>
         </div>
       </div>
@@ -2519,40 +2682,40 @@ function buildFullTrend(d) {
         <table class="mvw-month-table">
           <thead>
             <tr>
-              <th>เดือน</th>
-              <th>จำนวนเที่ยว</th>
-              <th>ราคารับ (THB)</th>
-              <th>ส่วนต่าง (THB)</th>
-              <th>กำไร %</th>
-              <th>รายได้/เที่ยว</th>
+              <th style="white-space:nowrap;">เดือน</th>
+              <th style="text-align:right;white-space:nowrap;">จำนวนเที่ยว</th>
+              <th style="text-align:right;white-space:nowrap;">ราคารับ (THB)</th>
+              <th style="text-align:right;white-space:nowrap;">ราคาจ่าย (THB)</th>
+              <th style="text-align:right;white-space:nowrap;">ส่วนต่าง (THB)</th>
+              <th style="text-align:right;white-space:nowrap;">กำไร %</th>
             </tr>
           </thead>
           <tbody>
             ${monthsToShow.map((m, i) => {
     const trips = monthTrips[i] || 0;
     const recv = monthRevenue[i] || 0;
+    const pay = monthPays[i] || 0;
     const mg = monthMargins[i] || 0;
     const pct = recv > 0 ? (mg / recv * 100) : 0;
-    const perTrip = trips > 0 ? recv / trips : 0;
     const mgCls = mg >= 0 ? 'pos' : 'neg';
     return `<tr>
-                <td>${MTH[m] || m}</td>
-                <td>${fmtB(trips)}</td>
-                <td>${fmt(recv)}</td>
-                <td class="${mgCls}">${fmt(mg)}</td>
-                <td class="${mgCls}">${fmtP(pct)}</td>
-                <td>${fmt(perTrip)}</td>
+                <td style="white-space:nowrap;">${MTH[m] || m}</td>
+                <td style="text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;">${fmtB(trips)}</td>
+                <td style="text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;">${fmt(recv)}</td>
+                <td style="text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;">${fmt(pay)}</td>
+                <td class="${mgCls}" style="text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;">${fmt(mg)}</td>
+                <td class="${mgCls}" style="text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;">${fmtP(pct)}</td>
               </tr>`;
   }).join('')}
           </tbody>
           <tfoot>
             <tr>
-              <td>รวม / เฉลี่ย</td>
-              <td>${fmtB(s.totalTrips)}</td>
-              <td>${fmt(s.totalRevenue)}</td>
-              <td class="${s.totalMargin >= 0 ? 'pos' : 'neg'}">${fmt(s.totalMargin)}</td>
-              <td class="${s.avgMarginPct >= 0 ? 'pos' : 'neg'}">${fmtP(s.avgMarginPct)}</td>
-              <td>${fmt(avgPerTrip)}</td>
+              <td style="white-space:nowrap;">รวม / เฉลี่ย</td>
+              <td style="text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;">${fmtB(s.totalTrips)}</td>
+              <td style="text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;">${fmt(s.totalRevenue)}</td>
+              <td style="text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;">${fmt(totalMonthlyPay)}</td>
+              <td class="${s.totalMargin >= 0 ? 'pos' : 'neg'}" style="text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;">${fmt(s.totalMargin)}</td>
+              <td class="${s.avgMarginPct >= 0 ? 'pos' : 'neg'}" style="text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;">${fmtP(s.avgMarginPct)}</td>
             </tr>
           </tfoot>
         </table>
@@ -2617,7 +2780,7 @@ function buildFullTrend(d) {
     </div>
 
     ${buildAuditTableSection('audit-overview-routes', 'Top 10 เส้นทางที่มีเที่ยววิ่งมากที่สุด', '&#10148;', '#3b82f6', 'กรองลูกค้า ประเภทรถ และตรวจสอบเที่ยวรายเดือนในตารางเดียว')}
-    ${buildAuditTableSection('audit-overview-months', 'สรุปผลประกอบการรายเดือน', '&#8862;', '#8b5cf6', 'ตรวจสอบจำนวนเที่ยว รายได้ ส่วนต่าง และกำไร % รายเดือน')}
+    ${buildAuditTableSection('audit-overview-months', 'สรุปผลประกอบการรายเดือน', '&#8862;', '#8b5cf6', 'ตรวจสอบจำนวนเที่ยว ราคารับ ราคาจ่าย ส่วนต่าง และกำไร % รายเดือน')}
   `;
 }
 
@@ -3715,20 +3878,17 @@ function getMasterModalTableConfigs(key, d, opts = {}) {
       { key: 'totalMargin', label: 'ส่วนต่างรวม', type: 'currency', align: 'right', strong: true, tone: 'sign' }
     ];
     const monthlyRows = monthsToShow.map((month, index) => {
-      const dailyStat = getMonthlyStatsFromDaily(d, month);
-      const trips = dailyStat ? dailyStat.trips : d.routeTrend.reduce((sum, row) => sum + (row.months?.[month]?.trips || 0), 0);
-      const margin = dailyStat ? dailyStat.margin : d.routeTrend.reduce((sum, row) => sum + (row.months?.[month]?.margin || 0), 0);
-      const recv = dailyStat ? dailyStat.recv : d.routeTrend.reduce((sum, row) => {
-        const monthData = row.months?.[month] || {};
-        const recvValue = Number(monthData.recv);
-        if (Number.isFinite(recvValue)) return sum + recvValue;
-        return sum + (Number(monthData.pay) || 0) + (Number(monthData.oil) || 0) + (Number(monthData.margin) || 0);
-      }, 0);
+      const monthStat = getMonthlyStatsFromRouteTrend(d, month);
+      const trips = monthStat.trips || 0;
+      const recv = monthStat.recv || 0;
+      const pay = monthStat.pay || 0;
+      const margin = monthStat.margin || 0;
       return {
         order: index,
         month: MTH[month] || month,
         trips,
         recv,
+        pay,
         margin,
         pct: recv > 0 ? (margin / recv) * 100 : null,
         status: margin > 0 ? 'กำไร' : margin < 0 ? 'ขาดทุน' : 'คงที่'
@@ -3755,8 +3915,9 @@ function getMasterModalTableConfigs(key, d, opts = {}) {
         cols: [
           { key: 'month', label: 'เดือน', strong: true, sortValue: row => row.order, noFilter: true },
           { key: 'trips', label: 'จำนวนเที่ยว', type: 'number', align: 'right', noFilter: true },
-          { key: 'recv', label: 'ราคารับรวม', type: 'currency', align: 'right', noFilter: true },
-          { key: 'margin', label: 'ส่วนต่างรวม', type: 'currency', align: 'right', strong: true, tone: 'sign' },
+          { key: 'recv', label: 'ราคารับ (THB)', type: 'currency', align: 'right', noFilter: true },
+          { key: 'pay', label: 'ราคาจ่าย (THB)', type: 'currency', align: 'right', noFilter: true },
+          { key: 'margin', label: 'ส่วนต่าง (THB)', type: 'currency', align: 'right', strong: true, tone: 'sign' },
           { key: 'pct', label: 'กำไร %', type: 'percent', align: 'right', tone: 'sign' },
           { key: 'status', label: 'สถานะ' }
         ],
@@ -5345,15 +5506,15 @@ function buildDailyCompare(data) {
         const isSubset = selected.length > 0 && selected.length < optionKeys.length;
         const visibleAnoms = isSubset
           ? visibleCards.reduce((sum, card) => {
-              const idx = Number(card.getAttribute('data-card-idx'));
-              const cardData = window._anomalyCardsData?.[idx];
-              if (!cardData) return sum;
-              const cardAnoms = cardData.anomRows.filter(row => {
-                const hasSelectedStatus = statusesMatchFilterSet(row.statuses, selectedSet);
-                return hasSelectedStatus && dcQaHasAnomalyStatus(row.statuses);
-              }).length;
-              return sum + cardAnoms;
-            }, 0)
+            const idx = Number(card.getAttribute('data-card-idx'));
+            const cardData = window._anomalyCardsData?.[idx];
+            if (!cardData) return sum;
+            const cardAnoms = cardData.anomRows.filter(row => {
+              const hasSelectedStatus = statusesMatchFilterSet(row.statuses, selectedSet);
+              return hasSelectedStatus && dcQaHasAnomalyStatus(row.statuses);
+            }).length;
+            return sum + cardAnoms;
+          }, 0)
           : visibleCards.reduce((sum, card) => sum + (Number(card.getAttribute('data-anom-count')) || 0), 0);
         if (routesEl) routesEl.textContent = String(visibleCards.length);
         if (anomsEl) anomsEl.textContent = String(visibleAnoms);
@@ -6843,9 +7004,9 @@ function buildDailyCompare(data) {
             ? gCell(count, { numFmt: '#,##0', align: 'right' })
             : key === 'noRef'
               ? mCell(count, { numFmt: '#,##0', align: 'right' })
-            : isInfoImpactStatus
-              ? cCell(count, { numFmt: '#,##0', align: 'right' })
-              : (count > 0 ? rCell(count, { numFmt: '#,##0', align: 'right' }) : cCell(count, { numFmt: '#,##0', align: 'right' }));
+              : isInfoImpactStatus
+                ? cCell(count, { numFmt: '#,##0', align: 'right' })
+                : (count > 0 ? rCell(count, { numFmt: '#,##0', align: 'right' }) : cCell(count, { numFmt: '#,##0', align: 'right' }));
           ws1Data.push([
             cCell(label, { bold: true }),
             valueCell,
