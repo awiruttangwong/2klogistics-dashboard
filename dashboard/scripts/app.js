@@ -7058,15 +7058,11 @@ function buildDailyCompare(data) {
           key
         }));
         ws1Data.push([]);
-        ws1Data.push([cCell('สรุปเชิงภาพ', { bold: true, sz: 11, color: '111827' }), cCell(''), cCell(''), cCell(''), cCell('')]);
-        ws1Data.push([cCell('สรุปตามสถานะ/tag ที่ตรวจพบ เพื่อใช้ตรวจเทียบกับชีทแยกและคอลัมน์ความผิดปกติในไฟล์เดียวกัน', { color: '6B7280', sz: 9, wrap: true }), cCell(''), cCell(''), cCell(''), cCell('')]);
         pushVisualStatusBlock(
           'สัดส่วนต่อเที่ยวทั้งหมด',
           statusVisualRows,
           totalForPct
         );
-        ws1Data.push([]);
-        ws1Data.push([cCell('หมายเหตุการอ่านกราฟ: สัดส่วนอาจรวมเกิน 100% ได้ เพราะ 1 เที่ยวอาจพบได้มากกว่า 1 สถานะ', { color: '6B7280', sz: 9, wrap: true }), cCell(''), cCell(''), cCell(''), cCell('')]);
         ws1Data.push([]);
         ws1Data.push([cCell('สรุปการตรวจสอบ', { bold: true, sz: 11, color: '111827' }), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell('')]);
         ws1Data.push([cCell(qaSummaryExplanationText, { color: '6B7280', sz: 9, wrap: false }), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell(''), cCell('')]);
@@ -7193,19 +7189,14 @@ function buildDailyCompare(data) {
         ws1Data.forEach((row, idx) => {
           const firstText = String(row?.[0]?.v || row?.[0] || '');
           const shouldMergeVisualRow =
-            firstText.startsWith('สรุปเชิงภาพ') ||
-            firstText.startsWith('สรุปตามสถานะ') ||
             firstText.startsWith('สัดส่วนต่อเที่ยวทั้งหมด') ||
-            firstText.startsWith('หมายเหตุการอ่านกราฟ') ||
             firstText.startsWith('สรุปการตรวจสอบ') ||
             firstText.startsWith('นิยาม:') ||
             firstText.startsWith('ภาพรวมการตรวจสอบ') ||
             firstText.startsWith('สรุปเหตุผลที่ผู้ตรวจระบุ');
           if (!shouldMergeVisualRow) return;
           ws1Merges.push({ s: { r: idx, c: 0 }, e: { r: idx, c: ws1ColumnCount - 1 } });
-          ws1['!rows'][idx] = firstText.startsWith('หมายเหตุการอ่านกราฟ')
-            ? { hpt: 24 }
-            : { hpt: 20 };
+          ws1['!rows'][idx] = { hpt: 20 };
         });
         ws1Merges.push({ s: { r: 4, c: 1 }, e: { r: 4, c: ws1ColumnCount - 1 } });
       }
