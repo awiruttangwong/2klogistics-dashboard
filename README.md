@@ -16,8 +16,19 @@ Legacy Netlify URL: https://2klogistics-dashboard.netlify.app
 Apps Script source directory: dashboard/API
 Apps Script project: DASHBOARD-DAILY-QA
 Google Sheet: Database Daily EXPRESS
-Active Supabase read model: cghcyuuyzahpzzbyxrgo (compact backend)
+Active Supabase read model: oecahsecztxykwiwonrb
 ```
+
+The two earlier Supabase projects (`cghcyuuyzahpzzbyxrgo`, then `juzkxljnyonckjkmttzq`)
+were both retired: the first was deleted outright by a Supabase-side incident
+(2026-09-07), and the second — used as an emergency replacement — hit
+Supabase's "Unresponsive Projects" platform incident (Nano/free-tier compute,
+2026-09-10) and never recovered even after pause/restore/restart. The current
+project `oecahsecztxykwiwonrb` was created fresh on 2026-09-12, schema
+re-applied from `supabase/migrations/`, and repopulated via a full
+`npm run supabase:sync -- --promote` from the Apps Script source (parity
+passed, zero rows failed). The source of truth is always the Google Sheet —
+Supabase is a rebuildable read cache, not the primary data store.
 
 The local folder name is only a Windows workspace label. Production deploys
 from the GitHub Actions workflow `.github/workflows/cloudflare-pages-deploy.yml`
@@ -80,10 +91,11 @@ apiMode: 'apps-script' | 'supabase-with-fallback' | 'supabase'
 
 The default is `supabase-with-fallback`: the browser calls `/api/supabase-api` (a Cloudflare Pages Function, `dashboard/functions/api/supabase-api.js`) first and falls back to the existing Apps Script URL if Supabase is unavailable.
 
-Production currently uses the compact Supabase backend `cghcyuuyzahpzzbyxrgo`.
-The previous project `juzkxljnyonckjkmttzq` is not used for production reads
-because its 2 GB database disk filled during the first full-snapshot migration
-design. Do not point Netlify or GitHub Actions back to that project.
+Production currently uses the Supabase backend `oecahsecztxykwiwonrb`. Two
+earlier projects are retired and must not be pointed to again: `juzkxljnyonckjkmttzq`
+(2 GB disk filled during the first full-snapshot migration design, then hit an
+unresolved Supabase "Unresponsive Projects" incident in Sept 2026) and
+`cghcyuuyzahpzzbyxrgo` (deleted by a Supabase-side incident in Sept 2026).
 
 `eagerTripsOnStartup: false` keeps the first dashboard screen fast by rendering from `summary_snapshots` first. Full trip rows are loaded lazily when the compare/export workflows need them.
 
